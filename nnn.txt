@@ -1,0 +1,2226 @@
+library(shiny)
+#############################################################
+pstab <- function(x, par, log.p = FALSE, lower.tail = TRUE)
+{
+	w <- c(
+	0.002908622553, 0.006759799195, 0.010590548383, 0.014380822761, 0.018115560713,
+	0.021780243170, 0.025360673570, 0.028842993580, 0.032213728223, 0.035459835615,
+	0.038568756612, 0.041528463090, 0.044327504338, 0.046955051303, 0.049400938449,
+	0.051655703069, 0.053710621888, 0.055557744806, 0.057189925647, 0.058600849813,
+	0.059785058704, 0.060737970841, 0.061455899590, 0.061936067420, 0.062176616655,
+	0.062176616655, 0.061936067420, 0.061455899590, 0.060737970841, 0.059785058704,
+	0.058600849813, 0.057189925647, 0.055557744806, 0.053710621888, 0.051655703069,
+	0.049400938449, 0.046955051303, 0.044327504338, 0.041528463090, 0.038568756612,
+	0.035459835615, 0.032213728223, 0.028842993580, 0.025360673570, 0.021780243170,
+	0.018115560713, 0.014380822761, 0.010590548383, 0.006759799195, 0.002908622553)
+	node <- c(
+	0.99886640442,  0.99403196943,  0.98535408404,  0.97286438510,  0.95661095524,
+	0.93665661894,  0.91307855665,  0.88596797952,  0.85542976942,  0.82158207085,
+	0.78455583290,  0.74449430222,  0.70155246870,  0.65589646568,  0.60770292718,
+	0.55715830451,  0.50445814490,  0.44980633497,  0.39341431189,  0.33550024541,
+	0.27628819377,  0.21600723687,  0.15489058999,  0.09317470156,  0.03109833832,
+	-0.03109833832, -0.09317470156, -0.15489058999, -0.21600723687, -0.27628819377,
+	-0.33550024541, -0.39341431189, -0.44980633497, -0.50445814490, -0.55715830451,
+	-0.60770292718, -0.65589646568, -0.70155246870, -0.74449430222, -0.78455583290,
+	-0.82158207085, -0.85542976942, -0.88596797952, -0.91307855665, -0.93665661894,
+	-0.95661095524, -0.97286438510, -0.98535408404, -0.99403196943, -0.99886640442)
+	#o<-quad_rule(100, type = "LE", alpha = 0, beta = 0, b = Inf);w=o$weight; node=o$node
+	a <- par[1]
+	s <- par[2]
+	m <- par[3]
+	n <- length(x)
+	CDF <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	z <- (y - m)/s
+	sz <- sign(z)
+	az <- abs(y - m)/s
+	if( abs(a - 1) < 0.005 )
+	{
+		CDF <- (1 - sz)/2 + sz*pt(az, df = 1)
+	}else{
+		up_tol  <- 40
+		low_tol <- 4e-07
+		j  <- ifelse( abs(a - 1) < 0.03, 80, 55 )
+		k  <- seq(1, j)
+		j2 <- ifelse(a < 0.5, 5, 130)
+		k2 <- seq(1, j2, 2)
+		up <- if( (a > 1.1 || a < 0.3) ){ up <- pi/2 }else{ up <- 1.55 }
+		ex <- ifelse( a > 1.02, 2*a, a )
+		ex <- ifelse( abs(a - 1)< 0.02, 0.3, a/2 )
+		L  <- max(0, (a*exp(lgamma(a*j + a) - lgamma(a*j + 1)))^(1/a) + ex)
+		U  <- max(0, a*exp(lgamma(j/a + 1) - lgamma(j/a + 1/a))       - ex)
+		let_L <- which(az > L)
+		z_L <- z[ let_L ]
+		let_U <- which(az < U)
+		z_U <- z[ let_U ]
+		let_O <- which( (az >= U & az <= L) )
+		z_O <- z[ let_O ]
+		n_U <- length(z_U)
+		n_L <- length(z_L)
+		n_O <- n - n_U - n_L
+			if( length(let_O) >= 1 )
+			{
+				for(i in let_O)
+				{
+					low <- ifelse( a < 0.99, 0, min (10e-16, up_tol*az[i]^(a/(1-a)), low_tol*az[i]^(a/(1-a)) ) )
+					low <- ifelse( (a > 0.99 & a < 1), 0.05, low)
+					v1 <- function(u) sin(a*u)^(a/(1-a))*cos((a-1)*u)*cos(u)^(1/(a-1)) - up_tol*az[i]^(a/(1-a))
+					bb <- uniroot(v1, lower = low, upper = up)$root
+						if( a < 1 )
+						{
+							p1 <- 1/2
+							a0 <- 0
+							b0 <- bb
+						}else{
+							b0 <- pi/2
+							a0 <- bb
+							p1 <- 1
+						}
+					x <- abs(b0 - a0)*(node + 1)/2 + min(a0, b0)
+					CDF[i] <- (1 - sz[i])/2 + sz[i]*( p1 + sign(1 - a)/pi*abs(b0 - a0)/2* 
+					sum( w*exp(-az[i]^(a/(a-1))*sin(a*x)^(a/(1-a))*cos((a-1)*x)*cos(x)^(1/(a-1)))) ) 
+				}
+			}
+		if( length(let_L) >= 1 )
+		{
+			CDF[let_L] <- sapply( let_L, function(i) (1 + sz[i])/2 + sz[i]/pi*
+			sum( (-1)^k*exp( lgamma(a*k+1) - lgamma(k+1) )*az[i]^(-a*k)/(a*k)*sin(k*pi/2*a) ) )
+		}
+		if( length(let_U) >= 1 )
+		{
+			CDF[let_U] <- sapply(let_U, function(i) 1/2 - sz[i]/pi*
+			sum( (-1)^k2*exp( lgamma(k2/a + 1) - lgamma(k2 + 1) )*az[i]^k2/k2*sin( k2*pi/2 ) ) )
+		}
+	} 
+if(log.p == TRUE  & lower.tail == FALSE) CDF <- suppressWarnings( log(1 - CDF) )
+if(log.p == TRUE  & lower.tail == TRUE ) CDF <- suppressWarnings( log(CDF) )
+if(log.p == FALSE & lower.tail == FALSE) CDF <- suppressWarnings( 1 - CDF )
+return(CDF)
+}
+#############################################################
+dstab <- function(x, par, log = FALSE)
+{
+	w <- c(
+	0.002908622553, 0.006759799195, 0.010590548383, 0.014380822761, 0.018115560713,
+	0.021780243170, 0.025360673570, 0.028842993580, 0.032213728223, 0.035459835615,
+	0.038568756612, 0.041528463090, 0.044327504338, 0.046955051303, 0.049400938449,
+	0.051655703069, 0.053710621888, 0.055557744806, 0.057189925647, 0.058600849813,
+	0.059785058704, 0.060737970841, 0.061455899590, 0.061936067420, 0.062176616655,
+	0.062176616655, 0.061936067420, 0.061455899590, 0.060737970841, 0.059785058704,
+	0.058600849813, 0.057189925647, 0.055557744806, 0.053710621888, 0.051655703069,
+	0.049400938449, 0.046955051303, 0.044327504338, 0.041528463090, 0.038568756612,
+	0.035459835615, 0.032213728223, 0.028842993580, 0.025360673570, 0.021780243170,
+	0.018115560713, 0.014380822761, 0.010590548383, 0.006759799195, 0.002908622553)
+	node <- c(
+	0.99886640442,  0.99403196943,  0.98535408404,  0.97286438510,  0.95661095524,
+	0.93665661894,  0.91307855665,  0.88596797952,  0.85542976942,  0.82158207085,
+	0.78455583290,  0.74449430222,  0.70155246870,  0.65589646568,  0.60770292718,
+	0.55715830451,  0.50445814490,  0.44980633497,  0.39341431189,  0.33550024541,
+	0.27628819377,  0.21600723687,  0.15489058999,  0.09317470156,  0.03109833832,
+	-0.03109833832, -0.09317470156, -0.15489058999, -0.21600723687, -0.27628819377,
+	-0.33550024541, -0.39341431189, -0.44980633497, -0.50445814490, -0.55715830451,
+	-0.60770292718, -0.65589646568, -0.70155246870, -0.74449430222, -0.78455583290,
+	-0.82158207085, -0.85542976942, -0.88596797952, -0.91307855665, -0.93665661894,
+	-0.95661095524, -0.97286438510, -0.98535408404, -0.99403196943, -0.99886640442)
+	#o<-quad_rule(120, type = "LE", alpha = 0, beta = 0, b = Inf);w=o$weight; node=o$node
+	a <- par[1]
+	s <- par[2]
+	m <- par[3]
+	n <- length(x)
+	PDF <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	z <- (y - m)/s
+	az <- abs(y - m)/s
+	n <- length(z)
+	PDF <- rep(NA, n)
+	if( abs(a - 1) < 0.005 )
+	{
+		PDF <- dt(z, df = 1)/s
+	}else{
+		up_tol  <- 40
+		low_tol <- 4e-07
+		j <- ifelse( abs(a - 1) < 0.03, 80, 55 )
+		k  <- seq(1, j)
+		j2 <- ifelse(a < 0.5, 5, 150)
+		k2 <- seq(1, j2, 2)
+		up <- if( (a > 1.1 || a < 0.3) ){ up <- pi/2 }else{ up <- 1.55 }
+		ex1 <- ifelse( a > 1.02, 2*a, a)
+		ex2 <- 0.8*a
+		L  <- max(0, (a*exp(lgamma(a*j + a) - lgamma(a*j + 1)))^(1/a) + ex1)
+		U  <- max(0, a*exp(lgamma(j/a + 1) - lgamma(j/a + 1/a))       - ex2)
+			if( (a > 1.005 & a <= 1.02) )
+			{
+				L <- 3; U <- 0.05
+			}else if( (a < 0.995 & a >= 0.98) )
+			{
+				L <- 0.94; U <- 0.31
+			}
+		let_L <- which(az > L)
+		z_L <- z[ let_L ]
+		let_U <- which(az < U)
+		z_U <- z[ let_U ]
+		let_O <- which( (az >= U & az <= L) )
+		z_O <- z[ let_O ]
+		n_U <- length(z_U)
+		n_L <- length(z_L)
+		n_O <- n - n_U - n_L
+			if( length(let_O) >= 1 )
+			{
+				for(i in let_O)
+				{
+					low <- ifelse(a < 0.99, 0, min( 10e-16, up_tol*az[i]^(a/(1-a)), low_tol*az[i]^(a/(1-a)) ) )
+					low <- ifelse( (a > 0.99 & a <1), 0.05, low)
+					v1 <- function(u)(1/sin(a*u))^(a/(a-1))*cos((a-1)*u)*cos(u)^(1/(a-1)) - up_tol*az[i]^(a/(1-a))
+					v2 <- function(u)(1/sin(a*u))^(a/(a-1))*cos((a-1)*u)*cos(u)^(1/(a-1)) - low_tol*az[i]^(a/(1-a))
+					a0 <- uniroot(v1, lower = low, upper = up)$root
+					b0 <- uniroot(v2, lower = low, upper = up)$root
+					x  <- abs(b0 - a0)*(node + 1)/2 + min(a0, b0)
+					PDF[i] <- abs(b0 - a0)/2*sum(a/(pi*abs(a-1)*az[i]*s)*w*az[i]^(a/(a-1))*(1/sin(a*x))^(a/(a-1))*
+								cos((a-1)*x)*cos(x)^(1/(a-1))*exp(-az[i]^(a/(a-1))*(1/sin(a*x))^(a/(a-1))*
+								cos((a-1)*x)*cos(x)^(1/(a-1))))
+				}
+			}
+				if( length(let_L) >= 1 )
+				{
+					PDF[let_L] <- sapply(let_L, function(i) 1/(pi*az[i]*s)*sum( (-1)^(k - 1)*exp(lgamma(a*k + 1) - 
+									lgamma(k + 1))*az[i]^(-a*k)*sin(k*pi/2*a)  ) )
+				}
+
+					if( length(let_U) >= 1 )
+					{
+						PDF[let_U] <- sapply(let_U, function(i) 1/(pi*az[i]*s)*sum( (-1)^(k2 - 1)*
+										exp(lgamma(k2/a + 1) - lgamma(k2 + 1))*az[i]^k2*sin(k2*pi/2) ) )
+					}
+	} 
+	PDF[az == 0] <- gamma(1 + 1/a)/pi
+if( log == TRUE ) PDF[let] <- log( PDF[let] )
+return(PDF)
+}
+#############################################################
+dpstab <- function(x, alpha, j = 90, log = FALSE)
+{
+	w <- c(
+	0.002908622553, 0.006759799195, 0.010590548383, 0.014380822761, 0.018115560713,
+	0.021780243170, 0.025360673570, 0.028842993580, 0.032213728223, 0.035459835615,
+	0.038568756612, 0.041528463090, 0.044327504338, 0.046955051303, 0.049400938449,
+	0.051655703069, 0.053710621888, 0.055557744806, 0.057189925647, 0.058600849813,
+	0.059785058704, 0.060737970841, 0.061455899590, 0.061936067420, 0.062176616655,
+	0.062176616655, 0.061936067420, 0.061455899590, 0.060737970841, 0.059785058704,
+	0.058600849813, 0.057189925647, 0.055557744806, 0.053710621888, 0.051655703069,
+	0.049400938449, 0.046955051303, 0.044327504338, 0.041528463090, 0.038568756612,
+	0.035459835615, 0.032213728223, 0.028842993580, 0.025360673570, 0.021780243170,
+	0.018115560713, 0.014380822761, 0.010590548383, 0.006759799195, 0.002908622553)
+	node <- c(
+	0.99886640442,  0.99403196943,  0.98535408404,  0.97286438510,  0.95661095524,
+	0.93665661894,  0.91307855665,  0.88596797952,  0.85542976942,  0.82158207085,
+	0.78455583290,  0.74449430222,  0.70155246870,  0.65589646568,  0.60770292718,
+	0.55715830451,  0.50445814490,  0.44980633497,  0.39341431189,  0.33550024541,
+	0.27628819377,  0.21600723687,  0.15489058999,  0.09317470156,  0.03109833832,
+	-0.03109833832, -0.09317470156, -0.15489058999, -0.21600723687, -0.27628819377,
+	-0.33550024541, -0.39341431189, -0.44980633497, -0.50445814490, -0.55715830451,
+	-0.60770292718, -0.65589646568, -0.70155246870, -0.74449430222, -0.78455583290,
+	-0.82158207085, -0.85542976942, -0.88596797952, -0.91307855665, -0.93665661894,
+	-0.95661095524, -0.97286438510, -0.98535408404, -0.99403196943, -0.99886640442)
+	#o<-quad_rule(120, type = "LE", alpha = 0, beta = 0, b = Inf);w=o$weight; node=o$node
+	a <- alpha/2
+	n <- length(x)
+	PDF <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	k  <- seq(1, j)
+	L  <- ( exp( lgamma(a*j + 1 + a) - lgamma(a*j + 1) )/(j + 1) )^(1/a) + ifelse(a < 0.5, a/6, a/3);
+	let_L <- which( y > L ); y_L <- y[ let_L ]
+	let_O <- which( y <= L ); y_O <- y[ let_O ]
+	n_L <- length(y_L)
+	n_O <- n - n_L
+	if( length(let_L) >= 1 )
+	{
+		PDF[let_L] <- sapply( let_L, function(i) 1/pi*sum( (-1)^(k - 1)*exp( lgamma(a*k + 1) - 
+						lgamma(k + 1) )*y[i]^(-a*k - 1)*sin(k*pi*a) ) )
+	}
+	if( length(let_O) >= 1 )
+	{
+		v2 <- function(u) exp( log( sin((1 - a)*u) ) + a/(1 - a)*log( sin(a*u) ) - log( sin(u) )/(1 - a) ) - 40
+		b0 <- uniroot(v2, lower = 0.01, upper = pi)$root
+		a0 <- asin( 10e-216^((1 - a)) );
+		x <- (b0 - a0)*(node + 1)/2 + a0
+		z <- sin( (1 - a)*x )*sin( a*x )^( a/(1 - a) )/sin(x)^( 1/(1 - a) )
+			for(i in let_O)
+			{
+				PDF[i] <- (b0 - a0)*a/(2*pi*(1 - a))*sum( exp( ( -a/(1 - a) - 1 )*
+						log(y[i]) + log(w) + log(z) - y[i]^(-a/(1 - a))*z ), na.rm = TRUE )
+			}
+	}
+if( log == TRUE ) PDF[let] <- log( PDF[let] )
+return(PDF)
+}
+#############################################################
+dst <- function(x, par, log = FALSE)
+{
+	n <- length(x)
+	PDF <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+	d <- (y - mu)/sigma
+		if( lambda == 0 )
+		{
+			PDF[let] <- 1/sigma*dt(d, df = nu)
+		}else{
+			PDF[let] <- 2/sigma*dt(d, df = nu)*
+					pt( lambda*d*sqrt((1 + nu)/(d^2 + nu)), df = 1 + nu )
+		}
+if( log == TRUE ) PDF[let] <- log( PDF[let] )
+return(PDF)
+}
+#############################################################
+dscn <- function(x, par, log = FALSE)
+{
+	n <- length(x)
+	PDF <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]; gam = par[5]
+	A <- lambda*(y - mu)/sigma
+	PDF[let] <- 2*nu*dnorm(y, mean = mu, sd = sigma/sqrt(gam) )*pnorm( sqrt(gam)*A ) +
+				2*(1 - nu)*dnorm(y, mean = mu, sd = sigma )*pnorm( A )
+if( log == TRUE ) PDF[let] <- log( PDF[let] )
+return(PDF)
+}
+#############################################################
+pst <- function(x, par, k=3, log.p = FALSE, lower.tail = TRUE)
+{
+	mu <- par[1]; sigma <- par[2]; lambda <- par[3]; nu <- par[4]
+	tol <- 10e-8
+	n <- length(x)
+	CDF <- rep(NA, n)	
+	let <- !( is.na(x) | abs(x) == Inf )
+	delta <- (x - mu)/sigma
+	delta <- delta[let]
+	d_l <- sqrt( nu*( tol^( -2/(nu + 1) ) - 1) )
+	g <- function(u, par0)
+	{ 
+	exp( log(2) + dt(u, df = nu, log = TRUE) + pt(par0*u*sqrt( (1 + nu)/(u^2 + nu) ), df = 1 + nu, log.p = TRUE) )
+	}
+	node <-	c(0.99312860, 0.96397193, 0.91223443, 0.83911697, 0.74633191, 0.63605368,
+			  0.51086700, 0.37370609, 0.22778585, 0.07652652,-0.07652652,-0.22778585,
+			 -0.37370609,-0.51086700,-0.63605368,-0.74633191,-0.83911697,-0.91223443,
+			 -0.96397193,-0.99312860)
+	weight <- c(0.01761401, 0.04060143, 0.06267205, 0.08327674, 0.10193012, 0.11819453,
+			    0.13168864, 0.14209611, 0.14917299, 0.15275339, 0.15275339, 0.14917299,
+			    0.14209611, 0.13168864, 0.11819453, 0.10193012, 0.08327674, 0.06267205,
+			    0.04060143, 0.01761401) 
+		if( lambda == 0 )
+		{
+			CDF <- pt(delta, df = nu)
+		}else{
+			lam <- -abs(lambda)
+			par[3] <- lam
+			sl <- sign(lambda)
+			for(i in 1:n)
+			{
+					x <- -sl*delta[i]
+					if( x < -k*d_l ) 
+					{
+						p <- (1 + sl)/2 - 2*sl*pt(x, df = nu)
+					}else if( x >= -k*d_l & x < k*d_l )
+					{
+						res <- tryCatch( integrate(g, lower = -k*d_l, upper = x, par0 = lam)$value, 
+									error = function(e)( "fail" ) )
+						if( res[1] == "fail" )
+						{        
+							a <- -d_l; b <- x; z <- (b - a)*(node + 1)/2 + a 
+							res <- (b - a)/2*sum( weight*dst(z, par = par) )
+						}
+						p <- (1 + sl)/2 - sl*min( 1, max(0, 2*pt(-k*d_l, df = nu) + res ) )
+					}else{
+						p <- 1 - ( (1 + sl)/2 -2*sl*( 1 - pt(x, df = nu) ) )
+					}
+			CDF[i] <- p
+			}
+		}
+		CDF[let] <- CDF
+CDF <- ifelse(CDF > 1, 1, CDF)
+if(log.p == TRUE  & lower.tail == FALSE) CDF <- suppressWarnings( log(1 - CDF) )
+if(log.p == TRUE  & lower.tail == TRUE ) CDF <- suppressWarnings( log(CDF) )
+if(log.p == FALSE & lower.tail == FALSE) CDF <- suppressWarnings( 1 - CDF )
+return(CDF)
+}
+#############################################################
+pplot <- function(y, dist = "pnorm", par = c(0, 1), probs = c(0.25, 0.75),...) 
+{
+	n <- length(y)
+	s_y <- sort(y)
+	r <- (1:n - 0.5)/(n + 1)
+	stopifnot( length(probs) == 2 )
+	p1 <- floor( probs[1]*n )
+	p2 <- floor( probs[2]*n )
+	p3 <- c(s_y[p2], s_y[p1])
+	if( dist == "pnorm" )
+	{ 
+		out <- pnorm( p3 , mean = par[1], sd = par[2] )
+		p0  <- pnorm( s_y, mean = par[1], sd = par[2] )
+	}
+	if( dist == "pssn" )
+	{ 
+		out <- pssn( p3 , par = c(par[1], par[2], par[3], par[4]) )
+		p0  <- pssn( s_y, par = c(par[1], par[2], par[3], par[4]) )
+	}
+	if( dist == "pst" )
+	{ 
+		out <- pst( p3 , par = c(par[1], par[2], par[3], par[4]), k = 3 )
+		p0  <- pst( s_y, par = c(par[1], par[2], par[3], par[4]), k = 3 )
+	}
+	if( dist == "pt" )
+	{ 
+		out <- pt( (p3  - par[1])/par[2] , df = par[3] )
+		p0  <- pt( (s_y - par[1])/par[2] , df = par[3] )
+	}
+	if( dist == "pstab" )
+	{ 
+		out <- pstab(p3, par = c(par[3], par[2], par[1]) )
+		p0  <- pstab(s_y, par = c(par[3], par[2], par[1]) )
+	}
+	slope <- diff( c(r[p2], r[p1]) )/diff( out )
+	int <- r[p1] - slope*out[2]
+	plot(r, p0, xlim = c(0, 1), ylim = c(0, 1),...)
+#	rect(-100, -100, 100, 100, col = gray(.95, alpha = .8))
+#	abline(h = seq(0, 1, .2), col = gray(1, alpha = .8), lwd = 1)
+#	abline(h = seq(0, 1, .2), col = gray(1, alpha = .8), lwd = 1)
+#	abline(v = seq(0, 1, .2), col = gray(1, alpha = .8), lwd = 1)
+#	abline(v = seq(0, 1, .2), col = gray(1, alpha = .8), lwd = 1)
+	abline(0, 1, col = 'red', lty = 1, lwd = 2)
+}
+#############################################################
+GOF <- function(x, dist = "pnorm", par = c(0, 1), npar)
+{
+	n <- length(x)
+	index <- 1:n
+	s_x   <- sort(x)
+	#n_par <- length(par)
+	if( dist == "pnorm" )
+	{ 
+		log_pdf <- dnorm( s_x, mean = par[1], sd = par[2], log = TRUE )
+		cdf     <- pnorm( s_x, mean = par[1], sd = par[2] )
+		Shapiro <- shapiro.test(s_x)
+		KS  <- suppressWarnings( ks.test(s_x, "pnorm", par[1], par[2]) )
+	}
+	if( dist == "pssn" )
+	{ 
+		log_pdf <- dssn( s_x, par = par, log = TRUE )
+		cdf     <- pssn( s_x, par = par )
+		Shapiro <- rep( NA, 2 )
+		KS  <- suppressWarnings( ks.test(s_x, "pssn", par ) )
+	}
+	if( dist == "pst" )
+	{ 
+		log_pdf <- dst( s_x, par = par, log = TRUE )
+		cdf     <- pst( s_x, par = par, k = 3 )
+		Shapiro <- rep( NA, 2 )
+		KS  <- suppressWarnings( ks.test(s_x, "pst", par, k = 3 ) )
+	}
+	if( dist == "pt" )
+	{ 
+		log_pdf <- dt( (s_x - par[1])/par[2], df = par[3], log = TRUE ) - log(par[2])
+		cdf     <- pt( (s_x - par[1])/par[2], df = par[3] )
+		Shapiro <- rep( NA, 2 )
+		KS  <- suppressWarnings( ks.test((s_x - par[1])/par[2], "pt", par[3] ) )
+	}
+	if( dist == "pstab" )
+	{ 
+		log_pdf <- dstab( s_x, par = c(par[3], par[2], par[1]), log = TRUE )
+		cdf     <- pstab( s_x, par = c(par[3], par[2], par[1]) )
+		Shapiro <- rep( NA, 2 )
+		KS  <- suppressWarnings( ks.test(s_x, "pstab", c(par[3], par[2], par[1]) ) )
+	}
+	cdf <- ifelse(cdf == 1, .Machine$double.eps, cdf)
+	log_cdf <- log(cdf)
+	log_cdf <- ifelse( is.finite( log_cdf ), log_cdf, NA )
+	log_survival <- suppressWarnings( log(1 - cdf) )
+	log.likelihood <- sum( log_pdf)
+	AD  <- -n - sum( (2*index - 1)*log_cdf + (2*n + 1 - 2*index)*log_survival, na.rm = TRUE )/n
+	AIC <- -2*log.likelihood + 2*npar
+	BIC <- -2*log.likelihood + npar*log(n)
+	CVM <- sum( ( cdf - (2*index - 1)/(2*n) )^2 ) + 1/(12*n)
+	out1 <- cbind( AD, AIC, BIC, CVM, log.likelihood )
+	colnames(out1) <- c( "AD", "AIC", "BIC", "CVM", "log.likelihood" )
+	out2 <- cbind( KS$statistic[[1]], KS$p.value )
+	if( dist == "pnorm" )
+	{ 
+		out3 <- cbind( Shapiro$statistic[[1]], Shapiro$p.value )
+		out4 <- cbind( paste0("H0: error follows normal distribution.") )
+	}else if( dist == "pscn" )
+	{
+		out3 <- cbind("NA", "NA") 
+		out4 <- cbind( paste0("H0: error follows skew contaminated norma distribution.") )
+	}else if( dist == "pssn")
+	{
+		out3 <- cbind("NA", "NA") 
+		out4 <- cbind( paste0("H0: error follows skew slash normal distribution.") )
+	}else if( dist == "pst" )
+	{
+		out3 <- cbind("NA", "NA") 
+		out4 <- cbind( paste0("H0: error follows skew Student's t distribution.") )
+	}else if( dist == "pt" )
+	{
+		out3 <- cbind("NA", "NA") 
+		out4 <- cbind( paste0("H0: error follows Student's t distribution.") )
+	}else if( dist == "pstab" )
+	{
+		out3 <- cbind("NA", "NA") 
+		out4 <- cbind( paste0("H0: error follows symmetric stable distribution.") )
+	}
+	colnames(out2) <- colnames(out3) <- c( "statistics", "p.value" ); colnames(out4) <- c( " " )
+	rownames(out1) <- rownames(out2) <- rownames(out3) <- rownames(out4) <- c( " " )
+	list( "H0" = out4, "GOF_statistics" = out1, "KS_test" = out2,  "Shapiro_test" = out3 )
+} 
+#############################################################
+############ is not accurate and must be completed ##########
+#############################################################
+pssn <- function(x, par, log.p = FALSE)
+{
+	n <- length(x)
+	CDF <- z_u <- rep(NA, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4];
+	d <- (y - mu)/sigma; A <- abs(lambda)*d; Mode <- (2*nu - 1)/d^2
+	node <-   c(0.99312860, 0.96397193, 0.91223443, 0.83911697, 0.74633191, 0.63605368,
+			0.51086700, 0.37370609, 0.22778585, 0.07652652,-0.07652652,-0.22778585,
+		     -0.37370609,-0.51086700,-0.63605368,-0.74633191,-0.83911697,-0.91223443,
+		     -0.96397193,-0.99312860)
+	weight <- c(0.01761401, 0.04060143, 0.06267205, 0.08327674, 0.10193012, 0.11819453,
+			0.13168864, 0.14209611, 0.14917299, 0.15275339, 0.15275339, 0.14917299,
+			0.14209611, 0.13168864, 0.11819453, 0.10193012, 0.08327674, 0.06267205,
+			0.04060143, 0.01761401) 
+	a1 <- 0; k <- 15; j <- 0; m <- length(node)
+	threshold <- k*sqrt( sigma )
+	a2 <- mu - threshold
+	weight_grid <- node_grid <- matrix(0, nrow = 20^2, ncol = 2)
+	weight_grid <- expand.grid(weight, weight)
+	node_grid   <- expand.grid(node, node)
+	weight <- apply(weight_grid, 1, prod)
+	f2 <- function(x, a, b){ ( x + 1 )*(b - a)/2 + a }
+			for(i in 1:n)
+			{
+				sg <- sign( lambda*d[i] )
+				if( sg == -1 )
+				{
+					b <- min( 2/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}else if( abs(d[i]) >= 10 & sg == 1 )
+				{
+					b <- min( Mode[i] + 2/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}else if( (abs(d[i]) < 10 & sg == 1 & abs(A[i]) >= 5) )
+				{
+					#b <- min( Mode[i] + 6/abs(d[i]*lambda), 1 );z <- (b - a)*(node + 1)/2 + a;out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+					out <- integrate(g, lower = 0, upper = 1, h = d[i])$value
+				}else if( (abs(d[i]) < 10 & sg == 1 & abs(A[i]) < 5) )
+				{
+					b <- min( Mode[i] + 6/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}
+ 		x1 <- ( node + 1 )*( b1 - a1 )/2 + a1
+		p1 <- -sigma*k/sqrt(x1) + mu
+		p2 <- apply( cbind( sigma*k/sqrt(x1) + mu, rep(x[i], m )), 1, min )
+		bound2 <- ( p2 - p1 )
+		x2 <- ( node + 1 )*bound2/2 + p1
+		node_grid1 <- apply( expand.grid(bound2, bound2), 1, prod)
+		X <- expand.grid(x1, x2); 
+		out <- (b1 - a1)/4*sum( weight*node_grid1*exp( log(2*nu) + (nu - 1)*log(X[, 1]) + 
+					dnorm( (X[, 2]-mu)/sigma, mean = 0, sd = 1/sqrt(X[, 1]), log = TRUE ) + 
+					pnorm( sqrt(X[, 1])*lambda*(X[, 2] - mu)/sigma, log.p = TRUE ) ) )
+				CDF[i] <- min( abs(out), 1)
+			}
+if( log.p == TRUE ) CDF[let] <- log( CDF[let] )
+return( CDF )
+}
+################### skew slash normal pdf (R.M.Bassoetal./Computational Statistics and Data Analysis, 54 (2010), 2926-2941 pp. 2929) #####################
+dssn <- function(x, par, log = FALSE)
+{
+	n <- length(x)
+	PDF <- rep(0, n)
+	let <- !( is.na(x) | abs(x) == Inf )
+	y <- x[let]
+	mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4];
+	d <- (y - mu)/sigma; A <- abs(lambda)*d; a <- 0;
+	Mode <- (2*nu - 1)/d^2
+	g <- function(u, h)
+	{ 
+		exp( log(2*nu) + (nu - 1)*log(u) + dnorm(h, mean = 0, sd = 1/sqrt(u), log = TRUE ) + 
+		pnorm( sqrt(u)*lambda*h, log.p = TRUE ) )	
+	}	
+	node <-   c(0.99312860, 0.96397193, 0.91223443, 0.83911697, 0.74633191, 0.63605368,
+			0.51086700, 0.37370609, 0.22778585, 0.07652652,-0.07652652,-0.22778585,
+		     -0.37370609,-0.51086700,-0.63605368,-0.74633191,-0.83911697,-0.91223443,
+		     -0.96397193,-0.99312860)
+	weight <- c(0.01761401, 0.04060143, 0.06267205, 0.08327674, 0.10193012, 0.11819453,
+			0.13168864, 0.14209611, 0.14917299, 0.15275339, 0.15275339, 0.14917299,
+			0.14209611, 0.13168864, 0.11819453, 0.10193012, 0.08327674, 0.06267205,
+			0.04060143, 0.01761401) 
+			for(i in 1:n)
+			{
+				sg <- sign( lambda*d[i] )
+				if( sg == -1 )
+				{
+					b <- min( 2/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}else if( abs(d[i]) >= 10 & sg == 1 )
+				{
+					b <- min( Mode[i] + 2/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}else if( (abs(d[i]) < 10 & sg == 1 & abs(A[i]) >= 5) )
+				{
+					#b <- min( Mode[i] + 6/abs(d[i]*lambda), 1 );z <- (b - a)*(node + 1)/2 + a;out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+					out <- integrate(g, lower = 0, upper = 1, h = d[i])$value
+				}else if( (abs(d[i]) < 10 & sg == 1 & abs(A[i]) < 5) )
+				{
+					b <- min( Mode[i] + 6/abs(d[i]*lambda), 1 )
+					z <- (b - a)*(node + 1)/2 + a
+					out <- (b - a)/2*sum( weight*g(z, h = d[i]) )
+				}
+			PDF[i] <- out
+			}
+if( log == TRUE ) PDF[let] <- log( PDF[let] )
+PDF
+}
+#############################################################
+reg_sas0 <- function(y, x)
+{
+	n <- length(y); N <- 4000; cri <- 10e-5; j <- 2; eps <- 1
+	k <- dim( cbind(y, x) )[2]
+	x <- as.matrix(x, nrow = n, ncol = k -1)
+	y_trim <- (y < quantile(y, 0.8) & y > quantile(y, 0.2) )
+	X1 <- cbind(y[y_trim], x[y_trim,])
+	Beta <- as.vector( lm( X1[, 1] ~ X1[, 2:k] )$coefficients )
+	m <- 0#mean(y[y_trim])
+	#m3 <- mean( (y - mu)^3 )
+	s <- sd( y[y_trim] )
+	lambda <- 0# sign(m3/sigma^3)[1]
+	a <- 1
+	out <- matrix(NA, ncol = (4 + k), nrow = N)
+	out[1, (k + 1):(k + 4)] <- c(a, lambda, s, m)
+	out[1, 1:k] <- Beta
+	j <- 2
+	X <- cbind(1, x)
+	h <- 0.1	
+	while( (eps > 0.5 & j < N) )
+	{
+		y0 <- y - X%*%Beta; 
+		az <- abs(y0 - m)/s
+		cond_expect <- abs( -2/az*( dstab( az + h, c(a, 1, 0), log = TRUE ) - dstab( az - h, c(a, 1, 0), log = TRUE ) )/(2*h) )
+		m <- 0#sum( y*cond_expect )/sum( cond_expect )
+		s <- sqrt( sum( (y0 - m)^2*cond_expect, na.rm = TRUE )/(2*n)  )				
+		obj <- function(x) -sum( dstab(y0, c(x, s, m), log = TRUE) )
+		a <- suppressWarnings( optimize( obj, c(0.2, 1.999) )$minimum )
+		Beta <- c( solve( matrix(crossprod(c(sqrt(cond_expect))*X), nrow = k, ncol = k) )%*%( t(X)%*%(y*cond_expect) ) )
+		#print(c(Beta,a, s, m))
+		out[j, ] <- c(Beta, a, lambda, s, m)
+		if( sum(abs(out[j - 1, 1:k] - out[j, 1:k])) < cri || j >= (N - 1) )#
+		{
+			eps <- 0
+		}else{ 
+			j <- j + 1 
+		}
+	}
+		estimator <- list(Beta = out[j - 1, 1:k], alpha = out[j - 1, k + 1], lambda = out[j - 1, k + 2], 
+						gamm = out[j - 1, k + 3],  delta = out[j - 1, k + 4])
+return(estimator)
+}
+#############################################################
+reg_sas <- function(y, x)
+{
+	n <- length(y); N <- 400; cri <- 10e-4; j <- 2; eps <- 1
+	k <- dim( cbind(y, x) )[2]
+	x <- as.matrix(x, nrow = n, ncol = k -1)
+	y_trim <- (y < quantile(y, 0.8) & y > quantile(y, 0.2) )
+	X1 <- cbind(y[y_trim], x[y_trim,])
+	Beta <- as.vector( lm( X1[, 1] ~ X1[, 2:k] )$coefficients )
+	m <- 0#mean(y[y_trim])
+	s <- sd( y[y_trim] )
+	#m3 <- mean( (y - mu)^3 )
+	#lambda <- sign(m3/sigma^3)[1]
+	a <- 1
+	out <- matrix(NA, ncol = (4 + k), nrow = N)
+	out[1, (k + 1):(k + 4)] <- c(a, 0, s, m)
+	out[1, 1:k] <- Beta
+	j <- 2
+	X <- cbind(1, x)
+	h <- 0.01	
+	#o1 <- quad_rule(40, type = "GL", alpha = -1/2, beta = 0, b = Inf); w1=o1$weight; node1=o1$node
+	while( (eps > 0.5 & j < N) )
+	{
+		y0 <- y - X%*%Beta; 
+		az <- abs(y0 - m)/s
+		cond_expect <-  -2/(az)*( dstab( az + h, c(a, 1, 0), log = TRUE ) - dstab( az - h, c(a, 1, 0), log = TRUE ) )/(2*h)
+		cond_expect[cond_expect<0] <- gamma(1 + 3/a)*gamma(1 + 1/2)/( gamma(1 + 3/2)*gamma(1 + 1/a) )
+		##cond_expect <- ( -2/(az)*( log(dstable( az + h, a, 0,1, 0,1 )) - log(dstable( az - h, a, 0,1, 0,1) ) )/(2*h) )
+		#	
+		##for(i in 1:n){p1[i] <- 1/(az[i]*sqrt(pi)*s)*sum( w1*dpstab(az[i]^2/(4*node1), a, j=90) ) ;p2[i] <- dstab(y[i],c(a,s,m));					}
+		#	ond_expect <- p1/p2 
+		m <- 0#sum( y*cond_expect )/sum( cond_expect )
+		s <- sqrt( sum( (y0 - m)^2*cond_expect, na.rm = TRUE )/(2*n)  )				
+		obj <- function(x) -sum( dstab(y0, c(x, s, m), log = TRUE) )
+		a <- suppressWarnings( optimize( obj, c(0.2, 1.999) )$minimum )
+		Beta <- c( solve( matrix(crossprod(c(sqrt(cond_expect))*X), nrow = k, ncol = k) )%*%( t(X)%*%(y*cond_expect) ) )
+		#print(c(Beta, a, s, m))
+		out[j, ] <- c(Beta, a, 0, s, m)
+		if( sum(abs(out[j - 1, 1:k] - out[j, 1:k])) < cri || j >= (N - 1) )#
+		{
+			eps <- 0
+		}else{ 
+			j <- j + 1 
+		}
+	}
+		estimator <- list(Beta = out[j - 1, 1:k], alpha = out[j - 1, k + 1], lambda = out[j - 1, k + 2], 
+						gamm = out[j - 1, k + 3],  delta = out[j - 1, k + 4])
+return(estimator)
+}
+#############################################################  
+sas_fit0 <- function(y, par)
+{
+	a <- par[1]
+	s <- par[2]
+	m <- par[3] 
+	n <- length(y)
+	#p1 <- p2 <- rep(NA, n)
+	out <- matrix(0, 2000, 3)
+	out[1, ] <- c(a, s, m)
+	j <- 1
+	threshold <- 1
+	h <- 0.005			
+	#o1 <- quad_rule(20, type = "GL", alpha = -1/2, beta = 0, b = Inf); w1=o1$weight; node1=o1$node
+		while( threshold == 1 )
+		{
+			az <- abs(y - m)/s
+			#for(i in 1:n){p1[i] <- 1/(az[i]*sqrt(pi)*s)*sum( w1*dpstab(az[i]^2/(4*node1), a, j=90) ) ;p2[i] <- dstab(y[i],c(a,s,m));					}
+			#ond_expect <- p1/p2 
+			cond_expect <- -2/az*( dstab( az + h, c(a, 1, 0), log = TRUE ) - dstab( az - h, c(a, 1, 0), log = TRUE ) )/(2*h)
+			m <- sum( y*cond_expect )/sum( cond_expect )
+			s <- sqrt(  sum( (y - m)^2*cond_expect, na.rm = TRUE )/(2*n)  )				
+			obj <- function(x) -sum( dstab(y, c(x, s, m), log = TRUE) )
+			a <- suppressWarnings( optimize( obj, c(0.2, 1.999) )$minimum )
+			#print(c(a, s, m))
+ 			out[j + 1, ] <- c(a, s, m)
+			dif <- sum( abs( out[j, ] - out[j + 1, ]) )
+			if( dif < 1e-05 ) threshold <- 2
+			j <- j + 1
+		}
+	out <- list(alpha = out[j, 1], gamm = out[j, 2], delta = out[j, 3] )
+return( out )
+}
+#############################################################
+FI_sas <- function(x, param, m = 10, h = 0.005)
+{
+# this code is adopted for S-alpha-S model. If skewness (lambda) is incorporated, then we needs to add
+# f4 function (partial derivaltive w.r.t lambda) too. 
+	node <-c(
+		0.99823771,  0.99072624,  0.97725995,  0.95791682,  0.93281281,  0.90209881,
+		0.86595950,  0.82461223,  0.77830565,  0.72731826,  0.67195668,  0.61255389,
+		0.54946713,  0.48307580,  0.41377920,  0.34199409,  0.26815219,  0.19269758,
+		0.11608407,  0.03877242, -0.03877242, -0.11608407, -0.19269758, -0.26815219,
+		-0.34199409, -0.41377920, -0.48307580, -0.54946713, -0.61255389, -0.67195668,
+		-0.72731826, -0.77830565, -0.82461223, -0.86595950, -0.90209881, -0.93281281,
+		-0.95791682, -0.97725995, -0.99072624, -0.99823771)
+	weight <-c(
+		0.004521277, 0.010498285, 0.016421058, 0.022245849, 0.027937007, 0.033460195,
+		0.038782168, 0.043870908, 0.048695808, 0.053227847, 0.057439769, 0.061306242,
+		0.064804013, 0.067912046, 0.070611647, 0.072886582, 0.074723169, 0.076110362,
+		0.077039818, 0.077505948, 0.077505948, 0.077039818, 0.076110362, 0.074723169,
+		0.072886582, 0.070611647, 0.067912046, 0.064804013, 0.061306242, 0.057439769,
+		0.053227847, 0.048695808, 0.043870908, 0.038782168, 0.033460195, 0.027937007,
+		0.022245849, 0.016421058, 0.010498285, 0.004521277)
+	#o<-quad_rule(100, type = "LE", alpha = 0, beta = 0, b = Inf);weight=o$weight; node=o$node
+
+		# psi is the whole parameter vector psi = beta + c(gamm, alpha)
+		#elements of li(psi): deriv. w.r.t beta
+			f0 <- function(u, par)
+			{
+				delta = par[1]; gamm = par[2]; alpha = par[3]; h = par[4] #lambda = par[5] must be added if there is skewness
+				z <- (u - delta)/gamm
+				p1m <- dstab(z - h, par = c(alpha, 1, 0), log = TRUE)
+				p1p <- dstab(z + h, par = c(alpha, 1, 0), log = TRUE)
+				( (p1p - p1m)/(2*h*gamm) )^2
+			}
+			f1 <- function(u, par)
+			{
+				delta = par[1]; gamm = par[2]; alpha = par[3]; h = par[4] #lambda = par[5] must be added if there is skewness
+				z <- (u - delta)/gamm
+				p1m <- dstab(z - h, par = c(alpha, 1, 0), log = TRUE)
+				p1p <- dstab(z + h, par = c(alpha, 1, 0), log = TRUE)
+				-1/gamm*(p1p - p1m)/(2*h)
+			}
+		#elements of li(psi): deriv. w.r.t gamm
+			f2 <- function(u, par)
+			{
+				delta = par[1]; gamm = par[2]; alpha = par[3]; h = par[4] #lambda = par[5] must be added if there is skewness
+				z <- (u - delta)/gamm
+				p1 <- -1/gamm 
+				p1m <- dstab(z - h, par = c(alpha, 1, 0), log = TRUE)
+				p1p <- dstab(z + h, par = c(alpha, 1, 0), log = TRUE)
+				p2 <- -z/gamm*(p1p - p1m)/(2*h)
+				p1 + p2
+			}
+		#elements of li(psi): deriv. w.r.t alpha
+		#elements of li(psi): deriv. w.r.t alpha
+			f3 <- function(u, par)
+			{
+				delta = par[1]; gamm = par[2]; alpha = par[3]; h = par[4] #lambda = par[5] must be added if there is skewness
+				z <- (u - delta)/gamm
+				if( alpha + h < 1.99 )
+				{
+					p1m <- dstab(z, par = c(alpha - h, 1, 0), log = TRUE)
+					p1p <- dstab(z, par = c(alpha + h, 1, 0), log = TRUE)
+					(p1p - p1m)/(2*h)
+				}else{
+					p1m <- dstab(z, par = c(alpha - h, 1, 0), log = TRUE)
+					p1p <- dstab(z, par = c(1.999    , 1, 0), log = TRUE)
+					(p1p - p1m)/( 2*(1.999 - alpha + h) )
+				}
+#( log(dstable(z, alpha + h, 0, 1, 0,1 )) - log(dstable(z, alpha - h, 0, 1, 0,1)) )/(2*h)
+			}
+		list_integrand <- list(f1, f2, f3) # add f4 if skewness parameter is added
+		n <- ifelse( is.null(dim(x)), length(x), dim(x)[1] )
+		p <- length( param ) 
+		k <- p - 2   # if there is skweness in model then k = p - 3
+		X  <- matrix( cbind( 1, x ), ncol = k, nrow = n)
+		#Beta <- param[1:k]; gamm <- param[k + 1]; lambda <- param[k + 2]; alpha <- param[k + 3]
+		Beta <- param[1:k]; gamm <- param[k + 1]; alpha <- param[k + 2]
+		x_beta <- X%*%Beta
+		par <- c("xi", "gamm", "alpha", "h") # if skewness is added then par <- c("xi", "gamm", "lambda", "alpha")
+		integrand <- function(u, par){ }
+		M <- matrix(0, ncol = p, nrow = p)
+### for I_beta*beta block
+		S <- rep(0, n)
+		body( integrand ) <- bquote( .( quote( f0(u, psi) ) )*
+					.( quote( dstab(u, c(psi[3], 1, 0)) ) )   )
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], gamm, alpha, h) # change to c(x_beta[i], gamm, lambda, alpha, h) if skewness parameter is added
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				#out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0 )$value, 
+				#				error = function(e)"fail" )
+					#if( out1[1] != "fail" )
+					#{
+					#	S[i] <- out1[1]
+					#}else{
+						S[i] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					#}
+		}
+		M[1:k, 1:k] <- crossprod(sqrt(S)*X)
+#####  I_beta*gamma block (upper-right rectangular)
+		R <- matrix(0, ncol = 2, nrow = n)
+
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], gamm, alpha, h)
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				for( s in 2:3 )
+				{
+					body( integrand ) <- bquote( .( quote( list_integrand[[1]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dstab(u, c(par[3], 1, 0)) ) )   )
+						R[i, (s - 1)] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+				}
+		}
+		M[1:k, (k + 1):p] <- crossprod( X, R )
+#########################################
+##### I_gamma*gamma block ( diagonal )
+		R2 <- matrix(0, ncol = 2, nrow = 2)  # ncol=3 for skewness
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], gamm, alpha, h) # change to c(x_beta[i], gamm, lambda, alpha, h) if skewness parameter is added
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+			for( r in 2:3 )
+			{
+				for( s in r:3 )
+				{
+				body( integrand ) <- bquote(  .( quote( list_integrand[[r]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dstab(u, c(par[3], 1, 0)) ) )   )
+						out <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+				M[(k - 1 + r ), (k - 1 + s)] <- M[(k - 1 + r ), (k - 1 + s)] + out
+				}
+			}
+		}
+Index <- which( upper.tri(M, diag = TRUE), arr.ind = TRUE )
+M[ cbind( Index[, 2], Index[, 1] ) ] <- M[ cbind( Index[, 1], Index[, 2] ) ]
+return( M )
+}
+#############################################################
+reg_loc <- function(y, x, model = c("st", "ssn", "scn", "t") )
+{
+	n <- length(y); N <- 4000; cri <- 10e-6; j <- 2; eps <- 1
+	K <- rep(NA, n)
+	k <- dim( cbind(y, x) )[2]
+	x <- as.matrix(x, nrow = n, ncol = k -1)
+	y_trim <- (y < quantile(y, 0.8) & y > quantile(y, 0.2) )
+	X1 <- cbind(y[y_trim], x[y_trim,])
+	Beta <- as.vector( lm( X1[, 1] ~ X1[, 2:k] )$coefficients )
+	mu <- 0#mean(y[y_trim])
+	m3 <- mean( (y - mu)^3 )
+	sigma <- sd( y[y_trim] )
+	lambda <- sign(m3/sigma^3)[1]
+	b0 <- 10
+		if( model == "scn" )
+		{
+			out <- matrix(NA, ncol = (5 + k), nrow = N)
+			nu <- 0.5; gam <- 0.5
+			out[1, (k + 1):(k + 5)] <- c(mu, sigma, lambda, nu, gam)
+		}
+		if( (model == "st" | model == "ssn" | model == "t") )
+		{
+			out <- matrix(NA, ncol = (4 + k), nrow = N)
+			nu <- 8
+			out[1, (k + 1):(k + 4)] <- c(mu, sigma, lambda, nu)
+		}
+	out[1, 1:k] <- Beta
+	Del <- lambda/sqrt(1 + lambda^2)*sigma
+	Gam <- (1 - lambda^2/(1 + lambda^2))*sigma^2
+	X <- cbind(1, x)
+	while(eps > 0.5 & j < N)
+	{
+		y0 <- y - X%*%Beta; 
+		d <- (y0 - mu)^2/sigma^2
+		A <- lambda*(y0 - mu)/sigma
+		Mu <- Del/(Gam + Del^2)*(y0 - mu)
+		M <- sqrt( Gam/(Gam + Del^2) )
+		if( model == "scn" )
+		{
+			pdf0 <- dscn( y0, par = c(mu, sigma, lambda, nu, gam) ) 
+			pdf0 <- ifelse(pdf0 > 10e-16, pdf0, 10e-16)
+			K    <- 2*(nu*gam*dnorm(y0, mean = mu, sd = sigma/sqrt(gam))*pnorm( sqrt(gam)*A ) +
+				  (1 - nu)*dnorm(y0, mean = mu, sd = sigma)*pnorm( A ) )/pdf0
+			tau  <- 2*(nu*sqrt(gam)*dnorm(y0, mean = mu, sd = sigma/sqrt(gam))*pnorm( sqrt(gam)*A ) +
+				  (1 - nu)*dnorm(y0, mean = mu, sd = sigma)*pnorm( A ) )/pdf0		
+		}
+		if( model == "ssn" )
+		{
+			pdf0 <- dssn( y0, par = c(mu, sigma, lambda, nu) ) 
+			pdf1 <- dssn( y0, par = c(mu, sigma, lambda, nu + 1) ) 
+			#K <- nu*2^(nu + 2)*gamma(nu + 3/2)*pgamma(1, shape = nu + 3/2, rate = d/2)/( d^(nu + 3/2)*sqrt(pi)*sigma*pdf0 )*exp_trunc( y0, par = c(mu, sigma, lambda, nu) )
+			tau  <- exp( log(nu) + (nu + 1)*log(2) + lgamma(nu + 1) - (nu + 1)*log(d + A^2) - log(pdf0*pi*sigma) + pgamma(1, shape = nu + 1, rate = (d + A^2)/2, log.p = TRUE ) )
+			K <-nu/(nu+1)*pdf1/pdf0
+		}
+		if(model == "st")
+		{
+			pdf0 <- dst( y0, par = c(mu, sigma, lambda, nu) ) 
+			pdf0 <- ifelse(pdf0 > 10e-16, pdf0, 10e-16)
+			K <- 4*nu^(nu/2)*gamma( (nu + 3)/2 )*(d + nu)^( -(nu + 3)/2 )*
+			pt(sqrt( (nu + 3)/(d + nu) )*A, df = nu + 3)/( pdf0*gamma(nu/2)*sqrt(pi)*sigma )
+			tau <- 2*nu^(nu/2)*gamma( (nu + 2)/2 )*(d + nu + A^2)^(-( nu + 2)/2 )/( pdf0*gamma(nu/2)*pi*sigma )
+		}
+		if(model == "t")
+		{
+			pdf0 <- dt( (y0 - mu)/sigma, df = nu )/sigma
+			K <- 4*nu^(nu/2)*gamma( (nu + 3)/2 )*(d + nu)^( -(nu + 3)/2 )/( 2*pdf0*gamma(nu/2)*sqrt(pi)*sigma )
+			tau <- 2*nu^(nu/2)*gamma( (nu + 2)/2 )*(d + nu + 0)^(-( nu + 2)/2 )/( pdf0*gamma(nu/2)*pi*sigma )
+			Mu  <- 0; M <- 1; 
+		}
+		s2 <- K*Mu + M*tau
+		s3 <- K*Mu^2 + M^2 + Mu*M*tau
+		mu <- 0#sum(K*y0 - Del*s2)/sum(K)
+		Del <- ifelse(model == "t", 0, sum((y0 - mu)*s2)/sum(s3) )
+		Gam <- abs( sum( K*(y0 - mu)^2 - 2*(y0 - mu)*Del*s2 + Del^2*s3 ) )/n
+		sigma <- sqrt(Del^2 + Gam)
+		lambda <- Del/sqrt(Gam)
+		Beta <- solve( matrix(crossprod(c(sqrt(K))*X), nrow = k, ncol = k) )%*%( t(X)%*%(y*K) )
+		if( model == "scn" )
+		{
+			omega <- 2*nu*dnorm(y0, mean = mu, sd = sigma/sqrt(gam) )*pnorm( sqrt(gam)*A )/pdf0
+			nu  <- sum(omega)/n
+			obj <- function(w) sum( -dscn(y0, par = c(mu, sigma, lambda, nu, w), log = TRUE) ) ##
+			gam <- suppressWarnings( optimize(obj, c(0.1, 0.99))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu, gam)
+		}
+		if( model == "ssn" )
+		{
+			obj <- function(w) sum( -dssn(y0, par = c(mu, sigma, lambda, w), log = TRUE) ) ##
+			#obj=function(w){sapply(1:length(w), function(r) sum(-dssn(y0, par = c(mu, sigma, lambda, w[r]), log = TRUE)))}
+			nu  <- suppressWarnings( optimize(obj, c(0.51, 70))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		if( model == "st" )
+		{
+			obj <- function(w) sum( -dst(y0, par = c(mu, sigma, lambda, w), log = TRUE) ) ##
+			nu  <- suppressWarnings( optimize(obj, c(1.01, 150))$minimum )
+			b_nu <- sqrt( nu/pi )*gamma( (nu - 1)/2 )/gamma( nu/2 )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		if( model == "t" )
+		{
+			obj <- function(x) sum( -1/sigma*dt( (y0 - mu)/sigma, df = x, log = TRUE) ) ##
+			nu  <- suppressWarnings( optimize(obj, c(1.01, 150))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		#out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		#print(c(j,out[j, 1:6])); #out[1:j,]#
+		if( sum(abs(out[j - 1, 1:(k )] - out[j, 1:(k )]))< cri || j >= (N - 1) )
+		{
+			eps <- 0
+			}else{ 
+			j <- j + 1 
+		}
+	}
+		if( model == "st" )
+		{
+				estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4])
+		}
+		if( (model == "ssn" | model == "t") )
+		{
+				estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4])
+		}
+		if( model == "scn" )
+		{
+                estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4], gam = out[j - 1, k + 5])
+		}
+    return( estimator )
+  } 
+#############################################################
+reg_mean <- function(y, x, model = c("st", "ssn", "scn", "t") )
+{
+	n <- length(y); N <- 4000; cri <- 10e-6; j <- 2; eps <- 1
+	K <- rep(NA, n)
+	k <- dim( cbind(y, x) )[2]
+	x <- as.matrix(x, nrow = n, ncol = k -1)
+	y_trim <- (y < quantile(y, 0.8) & y > quantile(y, 0.2) )
+	X1 <- cbind(y[y_trim], x[y_trim,])
+	Beta <- as.vector( lm( X1[, 1] ~ X1[, 2:k] )$coefficients )
+	mu <- 0#mean(y[y_trim])
+	m3 <- mean( (y - mu)^3 )
+	sigma <- sd( y[y_trim] )
+	lambda <- sign(m3/sigma^3)[1]
+	b0 <- 10
+		if( model == "scn" )
+		{
+			out <- matrix(NA, ncol = (5 + k), nrow = N)
+			nu <- 0.5; gam <- 0.5
+			out[1, (k + 1):(k + 5)] <- c(mu, sigma, lambda, nu, gam)
+		}
+		if( (model == "st" | model == "ssn" | model == "t") )
+		{
+			out <- matrix(NA, ncol = (4 + k), nrow = N)
+			nu <- 8
+			out[1, (k + 1):(k + 4)] <- c(mu, sigma, lambda, nu)
+		}
+	out[1, 1:k] <- Beta
+	Del <- lambda/sqrt(1 + lambda^2)*sigma
+	Gam <- (1 - lambda^2/(1 + lambda^2))*sigma^2
+	X <- cbind(1, x)
+	while(eps > 0.5 & j < N)
+	{
+		y0 <- y - X%*%Beta; 
+		d <- (y0 - mu)^2/sigma^2
+		A <- lambda*(y0 - mu)/sigma
+		Mu <- Del/(Gam + Del^2)*(y0 - mu)
+		M <- sqrt( Gam/(Gam + Del^2) )
+		if( model == "scn" )
+		{
+			pdf0 <- dscn( y0, par = c(mu, sigma, lambda, nu, gam) ) 
+			pdf0 <- ifelse(pdf0 > 10e-16, pdf0, 10e-16)
+			K    <- 2*(nu*gam*dnorm(y0, mean = mu, sd = sigma/sqrt(gam))*pnorm( sqrt(gam)*A ) +
+				  (1 - nu)*dnorm(y0, mean = mu, sd = sigma)*pnorm( A ) )/pdf0
+			tau  <- 2*(nu*sqrt(gam)*dnorm(y0, mean = mu, sd = sigma/sqrt(gam))*pnorm( sqrt(gam)*A ) +
+				  (1 - nu)*dnorm(y0, mean = mu, sd = sigma)*pnorm( A ) )/pdf0		
+		}
+		if( model == "ssn" )
+		{
+			pdf0 <- dssn( y0, par = c(mu, sigma, lambda, nu) ) 
+			pdf1 <- dssn( y0, par = c(mu, sigma, lambda, nu + 1) ) 
+			#K <- nu*2^(nu + 2)*gamma(nu + 3/2)*pgamma(1, shape = nu + 3/2, rate = d/2)/( d^(nu + 3/2)*sqrt(pi)*sigma*pdf0 )*exp_trunc( y0, par = c(mu, sigma, lambda, nu) )
+			tau  <- exp( log(nu) + (nu + 1)*log(2) + lgamma(nu + 1) - (nu + 1)*log(d + A^2) - log(pdf0*pi*sigma) + pgamma(1, shape = nu + 1, rate = (d + A^2)/2, log.p = TRUE ) )
+			K <-nu/(nu+1)*pdf1/pdf0
+		}
+		if(model == "st")
+		{
+			pdf0 <- dst( y0, par = c(mu, sigma, lambda, nu) ) 
+			pdf0 <- ifelse(pdf0 > 10e-16, pdf0, 10e-16)
+			K <- 4*nu^(nu/2)*gamma( (nu + 3)/2 )*(d + nu)^( -(nu + 3)/2 )*
+			pt(sqrt( (nu + 3)/(d + nu) )*A, df = nu + 3)/( pdf0*gamma(nu/2)*sqrt(pi)*sigma )
+			tau <- 2*nu^(nu/2)*gamma( (nu + 2)/2 )*(d + nu + A^2)^(-( nu + 2)/2 )/( pdf0*gamma(nu/2)*pi*sigma )
+		}
+		if(model == "t")
+		{
+			pdf0 <- dt( (y0 - mu)/sigma, df = nu )/sigma
+			K <- 4*nu^(nu/2)*gamma( (nu + 3)/2 )*(d + nu)^( -(nu + 3)/2 )/( 2*pdf0*gamma(nu/2)*sqrt(pi)*sigma )
+			tau <- 2*nu^(nu/2)*gamma( (nu + 2)/2 )*(d + nu + 0)^(-( nu + 2)/2 )/( pdf0*gamma(nu/2)*pi*sigma )
+			Mu  <- 0; M <- 1; 
+		}
+		s2 <- K*Mu + M*tau
+		s3 <- K*Mu^2 + M^2 + Mu*M*tau
+		mu <- 0#sum(K*y0 - Del*s2)/sum(K)
+		Del <- ifelse(model == "t", 0, sum((y0 - mu)*s2)/sum(s3) )
+		Gam <- abs( sum( K*(y0 - mu)^2 - 2*(y0 - mu)*Del*s2 + Del^2*s3 ) )/n
+		sigma <- sqrt(Del^2 + Gam)
+		lambda <- Del/sqrt(Gam)
+		Beta <- solve( matrix(crossprod(c(sqrt(K))*X), nrow = k, ncol = k) )%*%( t(X)%*%(y*K) - Del*t(X)%*%s2 )
+		if( model == "scn" )
+		{
+			omega <- 2*nu*dnorm(y0, mean = mu, sd = sigma/sqrt(gam) )*pnorm( sqrt(gam)*A )/pdf0
+			nu  <- sum(omega)/n
+			obj <- function(w) sum( -dscn(y0, par = c(mu, sigma, lambda, nu, w), log = TRUE) ) ##
+			gam <- suppressWarnings( optimize(obj, c(0.1, 0.99))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu, gam)
+		}
+		if( model == "ssn" )
+		{
+			obj <- function(w) sum( -dssn(y0, par = c(mu, sigma, lambda, w), log = TRUE) ) ##
+			#obj=function(w){sapply(1:length(w), function(r) sum(-dssn(y0, par = c(mu, sigma, lambda, w[r]), log = TRUE)))}
+			nu  <- suppressWarnings( optimize(obj, c(0.51, 70))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		if( model == "st" )
+		{
+			obj <- function(w) sum( -dst(y0, par = c(mu, sigma, lambda, w), log = TRUE) ) ##
+			nu  <- suppressWarnings( optimize(obj, c(1.01, 150))$minimum )
+			b_nu <- sqrt( nu/pi )*gamma( (nu - 1)/2 )/gamma( nu/2 )
+			Beta[1] <- Beta[1] + mu + sigma*lambda/sqrt(1 + lambda^2)*b_nu
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		if( model == "t" )
+		{
+			obj <- function(x) sum( -1/sigma*dt( (y0 - mu)/sigma, df = x, log = TRUE) ) ##
+			nu  <- suppressWarnings( optimize(obj, c(1.01, 150))$minimum )
+			out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		}
+		#out[j, ] <- c(Beta, mu, sigma, lambda, nu)
+		#print(c(j,out[j, 1:6])); #out[1:j,]#
+		if( sum(abs(out[j - 1, 1:(k )] - out[j, 1:(k )]))< cri || j >= (N - 1) )
+		{
+			eps <- 0
+			}else{ 
+			j <- j + 1 
+		}
+	}
+		if( model == "st" )
+		{
+				estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4])
+		}
+		if( (model == "ssn" | model == "t") )
+		{
+				estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4])
+		}
+		if( model == "scn" )
+		{
+                estimator <- list(Beta = out[j - 1, 1:k], mu = out[j - 1, k + 1], sigma = out[j - 1, k + 2], 
+				lambda = out[j - 1, k + 3], nu = out[j - 1, k + 4], gam = out[j - 1, k + 5])
+		}
+    return( estimator )
+  }
+#############################################################
+FI_mean <- function(x, param, m = 10, h = 0.005)
+{
+	node <-c(
+		0.99823771,  0.99072624,  0.97725995,  0.95791682,  0.93281281,  0.90209881,
+		0.86595950,  0.82461223,  0.77830565,  0.72731826,  0.67195668,  0.61255389,
+		0.54946713,  0.48307580,  0.41377920,  0.34199409,  0.26815219,  0.19269758,
+		0.11608407,  0.03877242, -0.03877242, -0.11608407, -0.19269758, -0.26815219,
+		-0.34199409, -0.41377920, -0.48307580, -0.54946713, -0.61255389, -0.67195668,
+		-0.72731826, -0.77830565, -0.82461223, -0.86595950, -0.90209881, -0.93281281,
+		-0.95791682, -0.97725995, -0.99072624, -0.99823771)
+	weight <-c(
+		0.004521277, 0.010498285, 0.016421058, 0.022245849, 0.027937007, 0.033460195,
+		0.038782168, 0.043870908, 0.048695808, 0.053227847, 0.057439769, 0.061306242,
+		0.064804013, 0.067912046, 0.070611647, 0.072886582, 0.074723169, 0.076110362,
+		0.077039818, 0.077505948, 0.077505948, 0.077039818, 0.076110362, 0.074723169,
+		0.072886582, 0.070611647, 0.067912046, 0.064804013, 0.061306242, 0.057439769,
+		0.053227847, 0.048695808, 0.043870908, 0.038782168, 0.033460195, 0.027937007,
+		0.022245849, 0.016421058, 0.010498285, 0.004521277)
+		# psi is the whole parameter vector psi = beta + c(sigma, lambda, nu)
+		#elements of li(psi): deriv. w.r.t beta
+			f0 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				#p1 <- pi*(nu + 1)/(nu*sigma)*z*dt( z/sqrt(nu), df = 1)
+				p1 <- 1/sigma*(nu + 1)*z/(nu + z^2)
+				p2 <- -2*sqrt(2)*lambda/sigma*sqrt( (nu + 1)/nu )*
+					dt( sqrt(2/nu)*z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2)^2
+			}
+			f1 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				#p1 <- pi*(nu + 1)/(nu*sigma)*z*dt( z/sqrt(nu), df = 1)
+				p1 <- 1/sigma*(nu + 1)*z/(nu + z^2)
+				p2 <- -2*sqrt(2)*lambda/sigma*sqrt( (nu + 1)/nu )*
+					dt( sqrt(2/nu)*z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2)
+			}
+		#elements of li(psi): deriv. w.r.t sigma
+			f2 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				p1 <- -1/sigma 
+				p2 <- pi*(nu + 1)/(sigma*nu)*z^2*dt( z/sqrt(nu), df = 1)
+				p3 <- -2*sqrt(2)*lambda*z/sigma*sqrt( (nu + 1)/nu )*dt(z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2 + p3)
+			}
+		#elements of li(psi): deriv. w.r.t lambda
+			f3 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma - (1 + lambda^2)^(-3/2)*sqrt( nu/pi )*gamma( (nu - 1)/2 )/gamma( nu/2 )
+				p1 <- z*sqrt( (nu + 1)/(nu + z^2) )* 
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				p1
+			}
+		#elements of li(psi): deriv. w.r.t nu
+			f4 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				zm <- (u - mu)/sigma - lambda/sqrt(1 + lambda^2)*sqrt( (nu - h)/pi )*gamma( (nu - h - 1)/2 )/gamma( (nu - h)/2 )
+				zp <- (u - mu)/sigma - lambda/sqrt(1 + lambda^2)*sqrt( (nu + h)/pi )*gamma( (nu + h - 1)/2 )/gamma( (nu + h)/2 )
+				p1m <- dt( zm, df = nu - h, log = TRUE)
+				p1p <- dt( zp, df = nu + h, log = TRUE)
+				p2m <- pt( lambda*zm*sqrt( (nu - h + 1)/(nu - h + zm^2) ), df = nu - h + 1, log.p = TRUE)
+				p2p <- pt( lambda*zp*sqrt( (nu + h + 1)/(nu + h + zp^2) ), df = nu + h + 1, log.p = TRUE)
+				(p1p - p1m + p2p - p2m)/(2*h)
+			}
+		list_integrand <- list(f1, f2, f3, f4)
+		n <- ifelse( is.null(dim(x)), length(x), dim(x)[1] )
+		p <- length( param )
+		k <- p - 3
+		X  <- matrix( cbind( 1, x ), ncol = k, nrow = n)
+		Beta <- param[1:k]; sigma <- param[k + 1]; lambda <- param[k + 2]; nu <- param[k + 3]
+		x_beta <- X%*%Beta
+		par <- c("xi", "sigma", "lambda", "nu")
+		integrand <- function(u, par){ }
+		M <- matrix(0, ncol = p, nrow = p)
+		S <- rep(0, n)
+### for I_beta*beta block
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				body( integrand ) <- bquote( .( quote( f0(u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+				out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						S[i] <- out1[1]
+					}else{
+						S[i] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+		}
+			M[1:k, 1:k] <- crossprod(X*sqrt(S))
+#####  I_beta*gamma block (upper-right rectangular)
+		R <- matrix(0, ncol = 3, nrow = n)
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			#for(j in 1:4) assign(par[j], psi[j] ); a0 <- psi[1] - m*psi[2]; b0 <- psi[1] + m*psi[2]
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				for( s in 2:4 )
+				{
+					body( integrand ) <- bquote( .( quote( list_integrand[[1]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+					out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						R[i, (s - 1)] <- out1[1]
+					}else{
+						R[i, (s - 1)] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+				}
+		}
+		M[1:k, (k + 1):p] <- crossprod( X, R )
+##### I_gamma*gamma block ( diagonal )
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			#for(j in 1:4) assign(par[j], psi[j] );	a0 <- psi[1] - m*psi[2]; b0 <- psi[1] + m*psi[2]
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+			for( r in 2:4 )
+			{
+				for( s in r:4 )
+				{
+				body( integrand ) <- bquote( .( quote( list_integrand[[r]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+				out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						out <- out1[1]
+					}else{
+						out <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+				M[(k - 1 + r ), (k - 1 + s)] <- M[(k - 1 + r ), (k - 1 + s)] + out
+				}
+			}
+		}
+Index <- which( upper.tri(M, diag = TRUE), arr.ind = TRUE )
+M[ cbind( Index[, 2], Index[, 1] ) ] <- M[ cbind( Index[, 1], Index[, 2] ) ]
+return( M )
+}   
+#############################################################
+FI_loc <- function(x, param, m = 10, h = 0.005)
+{
+	node <-c(
+		0.99823771,  0.99072624,  0.97725995,  0.95791682,  0.93281281,  0.90209881,
+		0.86595950,  0.82461223,  0.77830565,  0.72731826,  0.67195668,  0.61255389,
+		0.54946713,  0.48307580,  0.41377920,  0.34199409,  0.26815219,  0.19269758,
+		0.11608407,  0.03877242, -0.03877242, -0.11608407, -0.19269758, -0.26815219,
+		-0.34199409, -0.41377920, -0.48307580, -0.54946713, -0.61255389, -0.67195668,
+		-0.72731826, -0.77830565, -0.82461223, -0.86595950, -0.90209881, -0.93281281,
+		-0.95791682, -0.97725995, -0.99072624, -0.99823771)
+	weight <-c(
+		0.004521277, 0.010498285, 0.016421058, 0.022245849, 0.027937007, 0.033460195,
+		0.038782168, 0.043870908, 0.048695808, 0.053227847, 0.057439769, 0.061306242,
+		0.064804013, 0.067912046, 0.070611647, 0.072886582, 0.074723169, 0.076110362,
+		0.077039818, 0.077505948, 0.077505948, 0.077039818, 0.076110362, 0.074723169,
+		0.072886582, 0.070611647, 0.067912046, 0.064804013, 0.061306242, 0.057439769,
+		0.053227847, 0.048695808, 0.043870908, 0.038782168, 0.033460195, 0.027937007,
+		0.022245849, 0.016421058, 0.010498285, 0.004521277)
+		# psi is the whole parameter vector psi = beta + c(sigma, lambda, nu)
+		#elements of li(psi): deriv. w.r.t beta
+			f0 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				#p1 <- pi*(nu + 1)/(nu*sigma)*z*dt( z/sqrt(nu), df = 1)
+				p1 <- 1/sigma*(nu + 1)*z/(nu + z^2)
+				p2 <- -2*sqrt(2)*lambda/sigma*sqrt( (nu + 1)/nu )*
+					dt( sqrt(2/nu)*z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2)^2
+			}
+			f1 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				#p1 <- pi*(nu + 1)/(nu*sigma)*z*dt( z/sqrt(nu), df = 1)
+				p1 <- 1/sigma*(nu + 1)*z/(nu + z^2)
+				p2 <- -2*sqrt(2)*lambda/sigma*sqrt( (nu + 1)/nu )*
+					dt( sqrt(2/nu)*z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2)
+			}
+		#elements of li(psi): deriv. w.r.t sigma
+			f2 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				p1 <- -1/sigma 
+				p2 <- pi*(nu + 1)/(sigma*nu)*z^2*dt( z/sqrt(nu), df = 1)
+				p3 <- -2*sqrt(2)*lambda*z/sigma*sqrt( (nu + 1)/nu )*dt(z, df = 2)*
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				(p1 + p2 + p3)
+			}
+		#elements of li(psi): deriv. w.r.t lambda
+			f3 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				p1 <- z*sqrt( (nu + 1)/(nu + z^2) )* 
+					dt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)/
+					pt( lambda*z*sqrt( (nu + 1)/(nu + z^2) ), df = nu + 1)
+				p1
+			}
+		#elements of li(psi): deriv. w.r.t nu
+			f4 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; lambda = par[3]; nu = par[4]
+				z <- (u - mu)/sigma
+				p1m <- dt( z, df = nu - h, log = TRUE)
+				p1p <- dt( z, df = nu + h, log = TRUE)
+				p2m <- pt( lambda*z*sqrt( (nu - h + 1)/(nu - h + z^2) ), df = nu + 1 - h, log.p = TRUE)
+				p2p <- pt( lambda*z*sqrt( (nu + h + 1)/(nu + h + z^2) ), df = nu + 1 + h, log.p = TRUE)
+				(p1p - p1m + p2p - p2m)/(2*h)
+			}
+		list_integrand <- list(f1, f2, f3, f4)
+		n <- ifelse( is.null(dim(x)), length(x), dim(x)[1] )
+		p <- length( param )
+		k <- p - 3
+		X  <- matrix( cbind( 1, x ), ncol = k, nrow = n)
+		Beta <- param[1:k]; sigma <- param[k + 1]; lambda <- param[k + 2]; nu <- param[k + 3]
+		x_beta <- X%*%Beta
+		par <- c("xi", "sigma", "lambda", "nu")
+		integrand <- function(u, par){ }
+		M <- matrix(0, ncol = p, nrow = p)
+		S <- rep(0, n)
+### for I_beta*beta block
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			#for(j in 1:4) assign(par[j], psi[j] );	a0 <- psi[1] - m*psi[2]; b0 <- psi[1] + m*psi[2]
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				body( integrand ) <- bquote( .( quote( f0(u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+				out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						S[i] <- out1[1]
+					}else{
+						S[i] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+		}
+			M[1:k, 1:k] <- crossprod(X/sigma*sqrt(S))
+#####  I_beta*gamma block (upper-right rectangular)
+		R <- matrix(0, ncol = 3, nrow = n)
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			#for(j in 1:4) assign(par[j], psi[j] );	a0 <- psi[1] - m*psi[2]; b0 <- psi[1] + m*psi[2]
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				for( s in 2:4 )
+				{
+					body( integrand ) <- bquote( .( quote( list_integrand[[1]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+					out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						R[i, (s - 1)] <- out1[1]
+					}else{
+						R[i, (s - 1)] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+				}
+		}
+		M[1:k, (k + 1):p] <- crossprod( X, R )
+##### I_gamma*gamma block ( diagonal )
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, lambda, nu)
+			#for(j in 1:4) assign(par[j], psi[j] );			a0 <- psi[1] - m*psi[2]; b0 <- psi[1] + m*psi[2]
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+			for( r in 2:4 )
+			{
+				for( s in r:4 )
+				{
+				body( integrand ) <- bquote( .( quote( list_integrand[[r]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dst(u, c(0, 1, par[3], par[4])) ) )   )
+				out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+								error = function(e)"fail" )
+					if( out1[1] != "fail" )
+					{
+						out <- out1[1]
+					}else{
+						out <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					}
+				M[(k - 1 + r ), (k - 1 + s)] <- M[(k - 1 + r ), (k - 1 + s)] + out
+				}
+			}
+		}
+Index <- which( upper.tri(M, diag = TRUE), arr.ind = TRUE )
+M[ cbind( Index[, 2], Index[, 1] ) ] <- M[ cbind( Index[, 1], Index[, 2] ) ]
+return( M )
+} 
+#############################################################
+FI_t <- function(x, param, m = 10, h = 0.005)
+{
+	node <-c(
+		0.99823771,  0.99072624,  0.97725995,  0.95791682,  0.93281281,  0.90209881,
+		0.86595950,  0.82461223,  0.77830565,  0.72731826,  0.67195668,  0.61255389,
+		0.54946713,  0.48307580,  0.41377920,  0.34199409,  0.26815219,  0.19269758,
+		0.11608407,  0.03877242, -0.03877242, -0.11608407, -0.19269758, -0.26815219,
+		-0.34199409, -0.41377920, -0.48307580, -0.54946713, -0.61255389, -0.67195668,
+		-0.72731826, -0.77830565, -0.82461223, -0.86595950, -0.90209881, -0.93281281,
+		-0.95791682, -0.97725995, -0.99072624, -0.99823771)
+	weight <-c(
+		0.004521277, 0.010498285, 0.016421058, 0.022245849, 0.027937007, 0.033460195,
+		0.038782168, 0.043870908, 0.048695808, 0.053227847, 0.057439769, 0.061306242,
+		0.064804013, 0.067912046, 0.070611647, 0.072886582, 0.074723169, 0.076110362,
+		0.077039818, 0.077505948, 0.077505948, 0.077039818, 0.076110362, 0.074723169,
+		0.072886582, 0.070611647, 0.067912046, 0.064804013, 0.061306242, 0.057439769,
+		0.053227847, 0.048695808, 0.043870908, 0.038782168, 0.033460195, 0.027937007,
+		0.022245849, 0.016421058, 0.010498285, 0.004521277)
+		# psi is the whole parameter vector psi = beta + c(sigma, nu)
+		#elements of li(psi): deriv. w.r.t beta
+			f0 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; nu = par[3]
+				z <- (u - mu)/sigma
+				(  1/sigma*(nu + 1)*z/(nu + z^2)  )^2
+			}
+			f1 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; nu = par[3]
+				z <- (u - mu)/sigma
+				1/sigma*(nu + 1)*z/(nu + z^2)
+			}
+		#elements of li(psi): deriv. w.r.t sigma
+			f2 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; nu = par[3]
+				z <- (u - mu)/sigma
+				p1 <- -1/sigma 
+				p2 <- pi*(nu + 1)/(sigma*nu)*z^2*dt(z/sqrt(nu), df = 1)
+				p1 + p2
+			}
+		#elements of li(psi): deriv. w.r.t nu
+			f3 <- function(u, par)
+			{
+				mu = par[1]; sigma = par[2]; nu = par[3]; h = 0.01
+				z <- (u - mu)/sigma
+				p1m <- dt(z, df = nu - h, log = TRUE)
+				p1p <- dt(z, df = nu + h, log = TRUE)
+				(p1p - p1m)/(2*h)
+			}
+		list_integrand <- list(f1, f2, f3)
+		n <- ifelse( is.null(dim(x)), length(x), dim(x)[1] )
+		p <- length( param )
+		k <- p - 2
+		X  <- matrix( cbind( 1, x ), ncol = k, nrow = n)
+		Beta <- param[1:k]; sigma <- param[k + 1]; nu <- param[k + 2]
+		x_beta <- X%*%Beta
+		par <- c("xi", "sigma", "nu")
+		integrand <- function(u, par){ }
+		M <- matrix(0, ncol = p, nrow = p )
+		S <- rep(0, n)
+### for I_beta*beta block
+		body( integrand ) <- bquote( .( quote( f0(u, par) ) )*
+					.( quote( dt(u, df = par[3]) ) )   )
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, nu)
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				#out1 <- tryCatch( integrate( integrand, lower = a0, upper = b0, par = psi )$value, 
+				#				error = function(e)"fail" )
+				#	if( out1[1] != "fail" )
+				#	{
+				#		S[i] <- out1[1]
+				#	}else{
+			S[i] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+				#	}
+		}
+			M[1:k, 1:k] <- crossprod( X*sqrt(S) )
+#####  I_beta*gamma block (upper-right rectangular)
+		R <- matrix(0, nrow = n, ncol = 2)
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, nu)
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+				for( s in 2:3 )
+				{
+					body( integrand ) <- bquote( .( quote( list_integrand[[1]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dt(u, df = par[3]) ) )   )
+					R[i, (s - 1)] <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+				}
+		}
+		M[1:k, (k + 1):p] <- crossprod( X, R )
+##### I_gamma*gamma block ( diagonal )
+		for(i in 1:n)
+		{
+			psi <- c(x_beta[i], sigma, nu)
+			a <- ifelse( abs( psi[1] )>= 10, 0, psi[1] )
+			a0 <- a - m; b0 <- a + m
+			w <- (b0 - a0)*(node + 1)/2 + a0
+			for( r in 2:3 )
+			{
+				for( s in r:3 )
+				{
+					body( integrand ) <- bquote( .( quote( list_integrand[[r]](u, par) ) )*
+									.( quote( list_integrand[[s]](u, par) ) )*
+									.( quote( dt(u, df = par[3]) ) )   )
+					out <- (b0 - a0)/2*sum( weight*integrand(w, psi) )
+					M[(k - 1 + r ), (k - 1 + s)] <- M[(k - 1 + r ), (k - 1 + s)] + out
+				}
+			}
+		}
+Index <- which( upper.tri(M, diag = TRUE), arr.ind = TRUE )
+M[ cbind( Index[, 2], Index[, 1] ) ] <- M[ cbind( Index[, 1], Index[, 2] ) ]
+return( M )
+}
+Mahdi212
+#############################################################
+robust_reg <- function(y, x, type = c("mean", "location"), model = c("st", "ssn", "scn", "t", "sas"), Fisher = FALSE)
+{
+	if( any(is.na(y)) ) warning('y contains missing values')
+	if( any(is.na(x)) ) warning('x contains missing values')
+	k <- dim( cbind(y, x) )[2]
+	Message <- FI <- matrix(NA, ncol = k + 3, nrow = k + 3)
+	n <- length(y)
+	if ( model == "sas" ) 
+	{
+		out <- reg_sas(y, x)
+		est <- c(out$gamm, out$alpha) # if skewness then: est <- c(out$gamm, out$lambda, out$alpha)
+	}
+	if ( model == "t" ) 
+	{
+		out <- reg_mean(y, x, model = model )
+		est <- c(out$sigma, out$nu)
+	}
+	if ( ( model == "st" & type == "location" ) ) 
+	{
+		out <- reg_loc(y, x, model = model)
+		est <- c(out$sigma, out$lambda, out$nu)
+	}else if ( ( model == "st" & type == "mean" ) ){
+		out <- reg_mean(y, x, model = model)
+		est <- c(out$sigma, out$lambda, out$nu)
+	}
+	Beta <- c( out$Beta )
+	out6 <- rbind( c(0, est) )
+	rownames(out6) <- c("[1]")
+	std.error <- rep(NA, k)
+	statistic <- rep(NA, k)
+	p.value <- rep(NA, k)
+	if( Fisher == TRUE )
+	{
+		if ( model == "st" ) 
+		{
+			if( type == "mean" )
+			{
+				FI <- FI_mean(x, param = c(Beta, est), m = 10, h = 0.005)
+			}else if( type == "location" ) 
+			{
+				FI <- FI_loc(x, param = c(Beta, est), m = 10, h = 0.005)
+			}
+			colnames(out6) <- c("Location", "Scale", "Skewness", "DF")
+		}
+			if ( model == "sas" ) 
+			{
+				FI <- FI_sas(x, param = c(Beta, est), m = 10, h = 0.005)
+				colnames(out6) <- c("Location", "Scale", "Tail index")	
+			}
+				if ( model == "t" ) 
+				{
+					FI <- FI_t(x, param = c(Beta, est), m = 10, h = 0.005)
+					colnames(out6) <- c("Location", "Scale", "DF")	
+				}
+					FI_inv <- solve( FI[1:k, 1:k], tol = 10e-200 )
+					if( any(FI_inv[1] == "NaN") ) 
+					{
+						Message <- c("FI is not invertible") 
+					}else{ 
+						e <- 1; Message <- FI_inv 
+					}
+				std.error <- sqrt( (diag( FI_inv )) )
+				statistic <- Beta/std.error
+				tail <- cbind( ( 1 - pt(statistic, n - k) ), pt(statistic, n - k) )
+				p.value <- 2*apply(tail, 1, min)
+	}
+	out1 <- cbind(Beta, std.error, statistic, p.value)
+	rownames(out1) <- c("beta.0 (Intercept)", sapply(1:k, function(i) (paste0("beta.",i," (x",i,")"))))[1:k]
+	if ( model == "t" )
+	{
+		colnames(out1) <- c( "Estimate", "Std. Error", "t value", "Pr(>|t|)" )  
+	}else if ( ( model == "sas" | model == "st" ) )
+	{
+		colnames(out1) <- c( "Estimate", "Std. Error", "Statistic", "P.value" )
+	}
+	error <- c( y - cbind(1, x)%*%Beta )
+	S.E <- sum( error^2 )
+	S.R <- sum( ( cbind(1, x)%*%Beta - mean(y) )^2 )
+	S.T <- (n - 1)*var(y)
+	if( k == 2)
+	{
+	out2 <- c(noquote( c(noquote(paste("y =", sep=" ", round(Beta[1], 5) )), 
+			sapply(1:(k - 1), function(i) paste0(ifelse(sign(Beta[i+1]) > 0, "+", "-"),
+			sep = " ",round( abs(Beta[i+1]), 5), "*", "x") ) )))
+	}else if (k > 2)
+	{
+	out2 <- c(noquote( c(noquote(paste("y =", sep=" ", round(Beta[1], 5) )), 
+			sapply(1:(k - 1), function(i) paste0(ifelse(sign(Beta[i+1]) > 0, "+", "-"),
+			sep = " ", round( abs(Beta[i+1]), 5), "*", "x", i) ) )))
+	}
+	out3 <- cbind(round(min(error),4), round(quantile(error, 0.25)[[1]], 4), round(quantile(error, 0.50)[[1]],4),
+	round(mean(error),4), round(quantile(error, 0.75)[[1]],4), round(max(error),4))
+	colnames(out3) <- c("Min", "1Q", "Median", "Mean", "3Q", "Max")
+	rownames(out3) <- c("[1]")
+	#F.value <- (S.T - S.E)/S.E*(n - k)/(k - 1)
+	#out4 <- cbind( F.value, k - 1, n - k, 1 - pf(F.value, k - 1, n - k) )
+	out5 <- cbind( 1 - S.E/S.T, 1 - (n - 1)/(n - k)*(S.E/S.T) )
+	colnames(out5) <- cbind("Multiple", "Adjusted")
+	rownames(out5) <- c("R.square")
+		if( (Fisher == TRUE & e == 1) )
+		{
+			out7 <- FI[1:k, 1:k]
+			colnames(out7) <- c("beta.0", colnames( out7[, 2:k], do.NULL = FALSE, prefix = "beta.") )
+			rownames(out7) <- c("beta.0", sapply(1:k, function(i) (paste0("beta.",i))))[1:k]
+		}else if( (Fisher == TRUE & e == 0) )
+		{
+			out7 <- Message
+		}else{
+			out7 <- NULL
+		}
+	list( "coefficients" = out1, "model" = out2, "residual" = out3, "R.square" = out5, "error" = out6, 
+		"FI" = out7 )
+}
+#######################################################################
+panel.hist <- function(x, col,...)
+{
+	usr <- par("usr");on.exit(par(usr));par(usr = c(usr[1:2], 0, 0.25))
+	h <- hist(x, plot = FALSE)
+	breaks <- h$breaks; nB <- length(breaks)
+	y <- h$counts
+	large <- 0.7*diff(range(x))/sqrt(2*pi*var(x))
+	rect( breaks[-nB], 0, breaks[-1],large*h$density, col = "steel blue",...)
+	u <- seq( min(x) - sd(x), max(x) + sd(x), length.out = 200)
+	lines(u, large*dnorm(u, mean = mean(x), sd = sd(x) ), col = 'red', lwd = 2.5 )
+}
+panel.reg <- function(x, y,...)
+{
+	points(x,y, ...)
+	abline(lm(y~x), col = 'blue', lwd=2) 
+}
+panel.cor <- function(x, y, c0,...)
+{
+	par(usr = c(0, 0.72, .25, .75))
+	r <- round(cor(x, y), 3)
+	#txt <- c(expression(paste(rho,"=              ")),r)
+	txt <- c(r)
+	text(0.5, .5, txt, cex = c0, font = 2)
+}
+#######################################################################
+reg_plot <- function(x, y, PI = FALSE, interval = c("c", "p"),...)
+{
+ 	model <- lm(y~x)
+ 	out <- summary(model)
+ 	b0 <- round(out$coefficien[1,1], 4)
+ 	b1 <- round(out$coefficien[2,1], 4)
+ 	note1 <- paste("Y=", b0, "+", b1, "X")
+ 	note2 <- paste( "R.squared=", round(out$r.squared, 4) ) 
+	n <- length(x)
+ 	new <- data.frame(x = seq(min(x), max(x), length = n))
+ 	if(PI == FALSE)
+ 	{
+ 		plot(x, y,...)
+ 		curve(b0 + b1*x, add = TRUE)
+ 		lines(new$x, b0 + b1*new$x)
+ 		#text(mean(x), max(y), note1)
+ 		#text(mean(x), quantile(y, 0.90), note2)
+ 	}else if(PI == TRUE){
+ 		pred <- predict(model, new, interval = interval)
+ 		plot(x, y,...)
+ 		x0<-c(new$x[1:n], new$x[n:1])
+ 		y0<-c(pred[, 2], pred[n:1, 3])
+		polygon(x0, y0, col = "light green", border = "red", cex=2,lty=2, lwd= 2)
+ 		#text(mean(x), max(y), note1)
+ 		#text(mean(x), quantile(y, 0.90), note2)
+ 		points(x, y,...)
+		curve(b0 + b1*x, add = TRUE, col = 'blue', lwd=2)
+ 	}
+}
+#######################################################################
+Laxis <- function(lab, y)
+{
+
+		if(lab == "Log")
+		{
+			out <- paste("Log", toupper( noquote(y) ) )
+		}else if(lab == "sr")
+		{
+			out <- paste("Square root of", toupper( noquote(y) ))
+		}else if(lab == "cr")
+		{
+			out <- paste("Cube root of", toupper( noquote(y) ))
+		}
+		else if(lab == "None")
+		{
+			out <- paste(toupper( noquote(y) ))
+		}
+out
+}
+#######################################################################
+about_page <- tabPanel(
+	title = "About", titlePanel("About"), "Created with Mahdi Teimouri", br(), "2026 May" )
+	runApp(list( 
+	ui = bootstrapPage(
+	#ui =fixedPage(
+	#if (interactive()) { 
+	#ui = fluidPage(
+	titlePanel(strong("Robust Linear Regression", windowTitle = "RLR")),
+
+      sidebarPanel(width=3,
+      fillRow(
+	fileInput("file1", "Choose file",
+                multiple = TRUE, accept = c("text/csv", "text/comma-separated-values,text/plain", 
+			".csv", ".xls", ".xlsx" )), height=80, width=300),
+      tags$hr(),
+      checkboxInput("header", "Header", TRUE),
+	tags$hr(),
+	fillRow( 
+	radioButtons("sep", "Separator", choices=c(Comma = ",", Semicolon = ";", Tab="\t", Excel = "."),selected = ","),
+		fillCol( 	  
+			radioButtons("disp", "Display", choices=c(Head = "head", All = "all"),selected = "head" ),
+			numericInput("sheet", "Sheet", 1,min=1,max=100,step=1),
+			height=150, width=90), 
+			numericInput("p", "Number of regressors", 1,min=1,max=100,step=1),
+		height=123, width=300),
+		tags$hr(),
+		fillRow(
+			radioButtons("quote", "Quote",choices=c(None = "", "Double Quote" = '"', "Single Quote" = "'" ), selected = '"' ),
+			selectInput("model0",label= "Choose error model",choices=c("normal" = "normal", "skew t" = "st", 
+			"t" = "t", "symmetric stable" = "sas"), selected = "normal"),
+		height=165, width=300),
+		tags$hr(),
+				fillRow(
+			selectInput("trans_y",label= "Transformation on Y",choices=c("None" = "None", "Logarithm" = "Log", "Square root" = "sr", "Cube root" = "cr"), selected = "None"),
+			selectInput("type0",label= "Regression type",choices=c("mean" = "mean", "location" = "location"), selected = "mean"),
+		height=165, width=300)
+		),
+		mainPanel(width=9,
+		tabsetPanel(
+ 			tabPanel("Table", 
+				fillRow(
+				tableOutput("contents"),
+            		width = "66%", height = "100%" )                                 
+      		),
+		tabPanel("Model summary",
+			fillRow(
+			column(width = 11.99, strong(verbatimTextOutput("summary2"))), 
+			height = 370, width = 693 )
+			),
+		tabPanel("Plot",          
+			fillRow(
+			column(width = 11.8, plotOutput("plot.reg", click="plot_click",brush=brushOpts(fill="#9cf",id="plot_brush.reg"),height=693,width=693)),
+			column(width = 12, strong(tableOutput("plot_brushedpoints.reg"))),  
+			height = 500, width = 1400 )
+			),
+ 		tabPanel("Residual summary", 
+			fillRow(
+            	column(width = 4.3, plotOutput("error.vs.yhat", click="plot_click",brush=brushOpts(fill="#9cf",id="plot_brush.yhat"),height=315,width=340)),
+			column(width = 11.96, plotOutput("hist.error", height = 315, width = 343)),
+			column(width =  4, strong(tableOutput("plot_brushedpoints.yhat"))),
+            	height = 370, width = 1050 )                                 
+			),
+ 		tabPanel("Residual graphical diagnostics", 
+			fillRow(
+			column(width = 4.3, plotOutput("pp", height = 315, width = 340)),
+			column(width = 11.9, strong(verbatimTextOutput("gof"))),
+            	height = 370, width = 693 )                                 
+			),
+		tabPanel("Help", "It is well known that the linear regression model, represented in simple
+		 case as Y= beta0 + beta1*X + epsilon, works based on three underlying assumptions for the
+		 innovation (or error) term 'epsilon' including: normality, independence, and variance 
+		stability. How well the linear regression model work depends on these three assumptions. 
+		If one of these assumptions is dropped, then there is no longer guarantee that the linear
+		regression model works well. Although some approaches such as weighted regression and 
+		normality transformation are suggested in practice in order to treat this issue(s), 
+		but finding a suitable weight or normality transformation depends on the sample evidence 
+		and its size. Moreover, the ordinary least square (OLS) principle no longer guarantees 
+		reliable estimators of 'beta0' and 'beta1' in the presence of outlier(s). Herein, we apply
+		 two classes of heavier and skew models, that is the skew Student's t and skew slash normal,
+		 for the innovation term rather than the usual normal one when one or all of the underlying
+		 assumptions is dropped. For more detailed information on latter two classes of distributions,
+		 we refer reader to R. M. Basso, V. H. Lachosa, C. R. B. Cabralb, P. Ghosh (2010), Robust 
+		mixture modeling based on scale mixtures of skew-normal distributions, Computational Statistics
+		 and Data Analysis, 54, 2926-2941, http://dx.doi.org/10.1016/j.csda.2009.09.031. $$\\sqrt{2}$$")
+		# tabPanel("Help",htmlOutput("")),
+		#tags$ul(htmlOutput("summary", container = tags$li, class = "custom-li-output"))
+		#withMathJax(helpText("Some math here $$\\alpha+\\beta$$"))
+		#div("more math here $$\\sqrt{2}$$")
+		#sidebarLayout( mainPanel(	tabsetPanel("Table")) )
+    )
+  )
+),
+
+server = function(input, output) 
+{
+	data <- reactive({ 
+	req(input$file1);
+	if( input$sep == "." ) 
+	{
+	library(readxl)
+	req(input$sheet);
+	dat0 <- read_excel(input$file1$datapath, sheet=input$sheet); dat = as.data.frame(dat0);	
+	}else{
+	req(input$sep); req(input$quote); req(input$header);
+	dat <- read.csv(input$file1$datapath, header = input$header, sep = input$sep, quote = input$quote)
+	}
+		if( input$trans_y == "Log" )
+		{
+			let <- !( is.na( dat$y ) | abs( dat$y ) == Inf | dat$y <= 0 )
+			if( any( let ) != FALSE  ) 
+			warning('y contains missing, infinite, or negative values')
+			dat <- dat[let, ]
+			dat$y <- log( dat$y )
+		}else if( input$trans_y == "sr" ) {
+			let <- !( is.na( dat$y ) | abs( dat$y ) == Inf | dat$y <= 0 )
+			if( any( let ) != FALSE  ) 
+			warning('y contains missing, infinite, or negative values')
+			dat <- dat[let, ]
+			dat$y <- sqrt( dat$y )
+		}else if( input$trans_y == "cr" ) {
+			let <- !( is.na( dat$y ) | abs( dat$y ) == Inf | dat$y <= 0 )
+			if( any( let ) != FALSE  ) 
+			warning('y contains missing or infinite values')
+			dat <- dat[let, ]
+			dat$y <- ( dat$y )^(1/3)
+		}
+	return(dat)
+})
+#############################################################
+output$contents <- renderTable({
+df <- req( data() ); p <- input$p; n <- length(df$y); colname <- as.vector( colnames(df) )
+colname[ colnames(df) == "y" ] <- Laxis( input$trans_y, colname[which(colname == "y")] )
+#colname[ colnames(df) != "y" ] <- sapply(1:p, function(i) Laxis( lab, colname[which(colname == paste("x",i,sep=""))]  ) )
+colnames(df) <- colname  
+ 	if(input$disp == "head") 
+	{
+      	out <- cbind( item = 1:6, head(df) )
+	}else{
+		out <- cbind( item = 1:n, df)
+	}
+out
+},width = "40%", align = 'r')
+#############################################################
+output$summary1 <- renderPrint({
+	df <- req( data() )
+	print( summary( df ) )
+})
+#############################################################
+output$plot_brushedpoints.reg <- renderTable({
+	df <- req( data() ); 
+	colname <- colnames(df)
+	y_name <- which(colname == "y")
+	colnames(df)[y_name] <- Laxis( input$trans_y, "y" )
+	if(input$p == 1)
+	{
+		out <- brushedPoints( df, input$plot_brush.reg, "x", colnames(df)[y_name] )
+			if (nrow(out) == 0)
+			{
+				return()
+			}else
+			{
+				out
+			}
+	}else
+	{
+		return()
+	}
+	},width = "40%", align = 'r')
+#############################################################
+lmModel <- reactive({
+	df <- req( data() ); df_dim <- dim(df); n <- df$y; p <- req( input$p ); model <- req( input$model0 )
+	type <- req( input$type0 )
+	if( df_dim[2] != (p + 1) ) stop("number of regressors is incorrect.")
+	if( p == 1 )	
+	{		
+		x <- df$x; y <- df$y
+	}else if( p > 1 )	
+	{
+		x_ind <- c(noquote(sapply(1:p, function(i) paste("df$x",i,sep="" ))))		
+		x <- as.matrix( df[, colnames(df) != "y"], nrow = n, ncol = p )
+		y <- df[, colnames(df) == "y"]	
+	}
+	if(model == "normal")
+	{
+		if( p == 1 )
+		{
+			out1 <- lm(y ~ x)
+			out2 <- summary( out1 )
+			Beta <- as.vector( out2$coefficients[, 1] )
+			out3 <- c(noquote( c(noquote(paste("y =",sep=" ",round(Beta[1], 5) )), sapply(1:p, 
+			function(i) paste0(ifelse(sign(Beta[i+1])>0,"+","-"),	sep=" ",round(abs(Beta[i+1]), 5),"*", "x") ) )))
+			out <- list( summary = out2, model = out3, anova = anova(out1) )
+		}else if( p > 1 )
+		{
+			relation <- noquote( c(noquote(paste("y~",sep="" )), sapply(1:(p - 1), 
+			function(i) paste0("df$x",i,"+", sep="") ), noquote(paste("df$x",p,sep="" ))) )
+			out1 <-  lm( as.formula(relation) ) 
+			out2 <- summary( out1 )
+			Beta <- as.vector( out2$coefficients[, 1] )
+			out3 <- c(noquote( c(noquote(paste("y =",sep=" ",round(Beta[1], 5) )), sapply(1:p, 
+					function(i) paste0(ifelse(sign(Beta[i+1])>0,"+","-"),	sep=" ",round(abs(Beta[i+1]), 5),"*", "x",i) ) )))
+			x_colname <- c( noquote( c( "(Intercept)", sapply(1:p, function(i) (paste0("x",i)))[1:p] ) ))
+			rownames(out2$coefficients) <- x_colname
+			out4 <- anova(out1)
+			rownames(out4) <- c(x_colname[-1], "Residuals")
+			out <- list( summary = out2, model = out3, anova = out4 )
+		}
+		resi <- as.vector( out1$resi )
+		coeff <- as.vector(out2$coefficients[, 1])
+		y_hat <- c( coeff%*%t(cbind(1, x)) )
+	}else
+	{
+			if( (model == "scn" & type == "mean") )
+			{
+				out <- robust_reg(y, x, type = "mean"    , model = "scn", Fisher = TRUE)
+			}else if( (model == "scn" & type == "location") )
+			{
+				out <- robust_reg(y, x, type = "location", model = "scn", Fisher = TRUE)
+			}else if( (model == "ssn" & type == "mean") )
+			{
+				out <- robust_reg(y, x, type = "mean"    , model = "ssn", Fisher = TRUE)
+			}else if( (model == "ssn" & type == "location") )
+			{
+				out <- robust_reg(y, x, type = "location", model = "ssn", Fisher = TRUE)
+			}else if( (model == "st" & type == "mean") )
+			{
+				out <- robust_reg(y, x, type = "mean"    , model = "st" , Fisher = TRUE)
+			}else if( (model == "st" & type == "location") )
+			{
+				out <- robust_reg(y, x, type = "location", model = "st" , Fisher = TRUE)
+			}else if( model == "t" )
+			{
+				out <- robust_reg(y, x, type = "mean"    , model = "t"  , Fisher = TRUE)
+			}else if( model == "sas" )
+			{
+				out <- robust_reg(y, x, type = "mean"    , model = "sas", Fisher = TRUE)
+			}
+			coeff <- as.vector(out$coefficients[, 1])
+			y_hat <- c( coeff%*%t(cbind(1, x)) )
+			resi <- y - y_hat
+	}
+	return( list( out = out, resi = resi, y_hat = y_hat, coeff = coeff ) )
+})
+#############################################################
+    output$summary2 <- renderPrint({
+    out <- req( lmModel() ); out$out
+	})
+#############################################################
+output$plot_brushedpoints.yhat <- renderTable({
+	out <- req( lmModel() ); resi <- out$resi; yhat <- out$y_hat;
+	dat <- data.frame(predicted = yhat, residual = resi)
+	out <- brushedPoints(dat, input$plot_brush.yhat, "predicted", "residual")
+		if (nrow(out) == 0)
+		{
+			return()
+		}else
+		{
+			out
+		}
+	},width = "40%", align = 'r')
+#############################################################
+output$plot.reg <- renderPlot({
+	df <- req( data() ); data_dim <- dim(df); n <- data_dim[1]; 
+	p <- req( input$p ); model <- req( input$model0 );
+	out <- req( lmModel() ); out <- as.vector( out$coeff )
+	pos <- ifelse( out[2] < 0, "topright", "topleft")
+	colname <- colnames(df)
+	y_name <- which(colname == "y")
+	colnames(df)[y_name] <- Laxis( input$trans_y, "y" )
+	if( (p == 1 & model == "normal") )
+	{
+		reg_plot(df$x, df[, y_name], PI = TRUE, interval="c", col='black', main = "Response vs. Independent", 
+		ylab = colnames(df)[y_name], mgp = c(2.5, 1, 0), cex.main = 1.5, cex.lab = 1.5, 
+		cex.axis = 1.5, cex = 0.8, lwd = 2)
+		leg <- c("Fitted regression line", "95% confidence inerval")
+		legend(pos, legend = leg, bty = "n", lwd = 2, cex = 1.1, col = c('blue','red'), lty = 1:2)
+	}else if( (p == 1 & model != "normal") )
+	{
+		x <- df$x; y <- df[, y_name]
+		x0 <- seq( min(x), max(x), length.out = 100 ); y0 <- out[1] + out[2]*x0
+		plot(x, y, col = 'black', xlab = 'X', main = "Response vs. Independent", 
+		ylab = colnames(df)[y_name], mgp = c(2.5, 1, 0), cex.main = 1.5, 
+		cex.lab = 1.5, cex.axis = 1.5, cex = 1, lwd = 2)
+		lines(x0, y0, cex = 1.5, lwd = 2, lty = 1, col = 'blue')
+		legend(pos, legend = c("Fitted regression line"), bty = "n", lwd = 2, cex = 1.1, col = 'blue', lty = 1)
+	}else if( p > 1 )
+	{
+		x_ind <- c(noquote(sapply(1:p, function(i) paste("df$x",i,sep="" ))))
+		x <- as.matrix( df[, colnames(df) != "y"]);# y <- df[, colnames(df) == "y"]
+		lab <- colnames(df)
+		clab <- -0.125*p + 2.25
+		suppressWarnings( pairs( df, upper.panel = panel.reg, diag.panel=panel.hist,
+		cex = clab, col = "black", oma=c(2, 2, 2, 2), cex.labels = clab, font.labels = 2,
+		lower.panel = panel.cor, bg = "blue", horOdd = TRUE, cex.axis = clab, labels = lab, c0 = clab ) )
+		#adjustcolor(4, .24),
+	}
+})
+#############################################################
+output$error.vs.yhat <- renderPlot({
+	out <- req( lmModel() ); resi <- out$resi; y_hat <- out$y_hat; model <- req( input$model0 ); 
+	out <- as.vector( out$coeff )
+	if (model == "normal")
+	{
+	Ylab <- "Residual based on normal"
+	}else if(model == "scn")
+	{
+	Ylab <- "Residual based on skew contaminated normal"
+	}else if(model == "ssn")
+	{
+	Ylab <- "Residual based on skew slash normal"
+	}else if(model == "st")
+	{
+	Ylab <- "Residual based on skew t"
+	}else if(model == "t")
+	{
+	Ylab <- "Residual based on Student t"
+	}
+	else if(model == "sas")
+	{
+	Ylab <- "Residual based on symmetric stable"
+	}
+		if( (model == "normal" | model == "t" | model == "sas") )
+		{
+			pos <- ifelse( mean(resi) > median(resi), "topright", "topleft")
+		}else if( model == "st" )
+		{
+			pos <- ifelse( out[2] < 0, "topright", "topleft")
+		}
+	x.lab <- c( expression(hat(Y)) )
+	mai.lab <- "Error vs. predicted"
+	plot(y_hat, resi, col = 'black', xlab = x.lab, main = "Error versus predicted", 
+	ylim = c( range(resi) ), ylab = Ylab, mgp = c(2.5, 1, 0), cex.main = 1.3, cex.lab = 1.3, lwd = 2,
+	cex.axis = 1.3, cex = 0.8)
+	abline(h = mean(resi), lwd = 2, cex = 1.3, col= 'red')
+})
+#############################################################
+output$hist.error<- renderPlot({
+	out <- req( lmModel() ); resi <- out$resi; model <- req( input$model0 )
+	x0 <- seq(min(resi) - sd(resi), max(resi) + sd(resi), length.out = 100);
+	n <- length(resi)
+	#resi_tri <- subset( resi, (resi < quantile(resi, 0.8) & resi > quantile(resi, 0.2) ) )
+	#dr0 <- diff(range(resi_tri))
+	#br0 <- ceiling( dr0*n^(1/3)/( 2*diff( as.vector( quantile(resi_tri, c(0.25, 0.75)) )) ) )
+	dr <- diff(range(resi))
+	br <- ceiling( dr*n^(1/3)/( 2*diff( as.vector( quantile(resi, c(0.25, 0.75)) )) ) )	
+	freq <- data.frame( table( cut(resi, br, labels = NULL, include.lowest = TRUE, right = TRUE, dig.lab = 4) ))
+	
+	if (model == "normal")
+	{
+		est <- c(mean(resi), sd(resi)); y0 <- dnorm(x0, mean = mean(resi), sd = sd(resi)); main_lab <- "Fitted normal density";
+	}else if(model == "scn")
+	{
+		est <- out$out$error; y0 <- dscn(x0, par = est); main_lab <- "Fitted skew contaminated normal density";
+	}else if(model == "ssn")
+	{
+		est <- out$out$error; y0 <- dssn(x0, par = est); main_lab <- "Fitted skew slash normal density";
+	}else if(model == "st")
+	{
+		est <- out$out$error; y0 <- dst(x0, par = est); main_lab <- "Fitted skew t density";
+	}else if(model == "t")
+	{
+		est <- out$out$error; y0 <- 1/est[2]*dt( (x0 - est[1])/est[2], df = est[3]); main_lab <- "Fitted Student t density";
+	}else if(model == "sas")
+	{
+		est <- out$out$error; y0 <- dstab(x0, par = c(est[3], est[2], est[1]) ); main_lab <- "Fitted symmetric stable density";
+	}
+	pos <- "topright"
+		if( all( model != c("normal", "t", "sas") ) )
+		{
+			est <- out$out$error; pos <- ifelse( est[3] > 0, "topright", "topleft")
+		}
+	hist(resi[-c(which.min(resi), which.max(resi))], br = br, prob = TRUE, ylim = c(0, br*max(freq$Freq)/(n*dr) + 0.05),
+	mgp = c(2.5, 1, 0), col = 'steelblue', xlab = 'Residual', ylab = "Relative frequency", 
+	main = main_lab, cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, cex = 1.3)
+	lines(x0, y0, lwd = 2, lty = 1, col = 'red')
+	legend(pos, legend = "Density", bty = "n", lwd = 2, cex = 1.2, col = 'red', lty = 1)
+	box(lwd=2)	
+})
+#############################################################
+output$gof <- renderPrint({
+	out <- req( lmModel() ); resi <- out$resi; model <- req( input$model0 ); k <- req( input$p ) + 1
+	
+	if (model == "normal")
+	{
+	est <- c( mean(resi), sd(resi) )
+	out_gof <- GOF(resi, dist = "pnorm", par = est, npar = k + 1 )
+	}else if(model == "scn")
+	{
+	est <- as.vector(out$out$error)
+	out_gof <- GOF(resi, dist = "pscn", par = est )
+	}else if(model == "ssn")
+	{
+	est <- as.vector(out$out$error)
+	out_gof <- GOF(resi, dist = "pssn", par = est )
+	}else if(model == "st")
+	{
+	est <- as.vector(out$out$error)
+	out_gof <- GOF(resi, dist = "pst", par = est, npar = k + 3 )
+	}else if(model == "t")
+	{
+	est <- as.vector(out$out$error)
+	out_gof <- GOF(resi, dist = "pt", par = est, npar = k + 2 )
+	}else if(model == "sas")
+	{
+	est <- as.vector(out$out$error)
+	out_gof <- GOF(resi, dist = "pstab", par = est, npar = k + 2 )
+	}
+	out_gof
+})
+#############################################################
+output$pp <- renderPlot({
+	out <- req( lmModel() ); resi <- out$resi; model <- req( input$model0 );
+	
+	if(model == "normal")
+	{
+	est <- c( mean(resi), sd(resi) )
+	out_pp <- pplot(resi, dist = "pnorm", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = 'normal probability plot',
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}else if(model == "scn")
+	{
+	est <- as.vector(out$out$error)
+	out_pp <- pplot(resi, dist = "pscn", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = 'Skew contaminated normal probability plot',
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}else if(model == "ssn")
+	{
+	est <- as.vector(out$out$error)
+	out_pp <- pplot(resi, dist = "pssn", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = 'Skew slash normal probability plot',
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}else if(model == "st")
+	{
+	est <- as.vector(out$out$error)
+	out_pp <- pplot(resi, dist = "pst", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = 'Skew t probability plot',
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}else if(model == "t")
+	{
+	est <- as.vector(out$out$error)
+	out_pp <- pplot(resi, dist = "pt", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = "Student's t probability plot",
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}else if(model == "sas")
+	{
+	est <- as.vector(out$out$error)
+	out_pp <- pplot(resi, dist = "pstab", par = est, probs = c(0.25, 0.75), mgp = c(2.5, 1, 0),
+	ylab = 'Theoretical CDF', xlab = 'Sample CDF', main = "Symmetric stable probability plot",
+	cex.main = 1.3, cex.lab = 1.3, cex.axis = 1.3, lwd = 2, cex = 0.8)
+	}
+	out_pp	
+})
+}
+#shinyApp(ui, server)}
+))
+#############################################################
